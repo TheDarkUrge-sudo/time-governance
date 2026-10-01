@@ -76,7 +76,9 @@ export async function runTuesday(deps: JobDeps, week: DateRange): Promise<JobRes
     if (deps.store && !deps.delivery.dryRun) {
       await deps.store.saveWeeklyResults(week.start, 'tuesday', review.people);
       await deps.store.saveAdHocUsage(week.start, review.adHocUsage);
-      await deps.store.purgeHistoryBefore(addDays(week.start, -deps.retentionDays));
+      if (deps.retentionDays > 0) {
+        await deps.store.purgeHistoryBefore(addDays(week.start, -deps.retentionDays));
+      }
     }
 
     const flagCount = review.people.reduce((n, p) => n + p.flags.length, 0);

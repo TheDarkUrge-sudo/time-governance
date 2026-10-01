@@ -14,6 +14,8 @@ export interface EscalationRow {
   /** This week plus the prior escalated weeks inside the lookback. */
   weeksFlagged: number;
   lookbackWeeks: number;
+  /** Escalations so far this calendar year, this week included. */
+  thisYear: number;
 }
 
 export function escalations(opts: {
@@ -23,6 +25,8 @@ export function escalations(opts: {
   flaggedTuesday: ReadonlySet<string>;
   /** Weeks this person was escalated in the (lookback − 1) weeks before this one. */
   priorEscalations: (email: string) => number;
+  /** Escalations earlier this calendar year, before this week. */
+  priorThisYear?: (email: string) => number;
   lookbackWeeks: number;
 }): EscalationRow[] {
   const rows: EscalationRow[] = [];
@@ -36,6 +40,7 @@ export function escalations(opts: {
       minutes: missing.minutes,
       weeksFlagged: Math.min(opts.lookbackWeeks, opts.priorEscalations(p.member.email) + 1),
       lookbackWeeks: opts.lookbackWeeks,
+      thisYear: (opts.priorThisYear?.(p.member.email) ?? 0) + 1,
     });
   }
   return rows.sort(

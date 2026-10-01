@@ -15,7 +15,7 @@ export interface JobDeps {
   adminTo: string[];
   internalClientKeys: ReadonlySet<string>;
   adHocTitle: string;
-  /** Weekly history older than this many days is purged after each Tuesday run. */
+  /** Weekly history older than this many days is purged after each Tuesday run; 0 = never. */
   retentionDays: number;
   /** Setup problems found while preparing the run, reported in the Tuesday admin summary. */
   setupNotes: string[];

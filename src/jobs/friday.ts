@@ -44,10 +44,14 @@ export async function runFriday(deps: JobDeps, week: DateRange): Promise<JobResu
     const prior = deps.store
       ? await deps.store.priorEscalationCounts(week.start, deps.policy.escalationLookbackWeeks)
       : new Map<string, number>();
+    const priorYear = deps.store
+      ? await deps.store.escalationCountsBetween(`${week.start.slice(0, 4)}-01-01`, week.start)
+      : new Map<string, number>();
     const rows = escalations({
       review,
       flaggedTuesday: tuesday ?? stillMissing,
       priorEscalations: (email) => prior.get(email) ?? 0,
+      priorThisYear: (email) => priorYear.get(email) ?? 0,
       lookbackWeeks: deps.policy.escalationLookbackWeeks,
     });
 
@@ -88,7 +92,8 @@ export async function runFriday(deps: JobDeps, week: DateRange): Promise<JobResu
       {
         title: 'Escalated',
         lines: rows.map(
-          (r) => `${r.member.name} — ${r.weeksFlagged} of the last ${r.lookbackWeeks} weeks`,
+          (r) =>
+            `${r.member.name} — ${r.weeksFlagged} of the last ${r.lookbackWeeks} weeks, ${r.thisYear} this year`,
         ),
       },
     ];

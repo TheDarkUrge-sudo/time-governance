@@ -14,6 +14,7 @@ import { Store } from '../src/db/store';
 import { testDb } from '../src/db/test-db';
 import type { Roster, RosterMember } from '../src/domain';
 import type { OutboundEmail } from '../src/email/sendgrid';
+import { escalationTotals, exportYear, findPeople, timeline } from '../src/history/history';
 import type { JobDeps } from '../src/jobs/context';
 import { runFriday } from '../src/jobs/friday';
 import { runMonthly } from '../src/jobs/monthly';
@@ -351,5 +352,25 @@ for (const [i, { label: l, msg }] of captured.entries()) {
   );
   console.log(`${name}\n    to ${msg.to.join(', ')}`);
 }
+// What `pnpm tg history riley` and `pnpm tg history --export 2026` produce.
+const [riley] = await findPeople(store, roster, 'riley');
+const esc = await store.escalationHistory({ email: riley!.email });
+const totals = escalationTotals(esc, '2026-10-01', 4);
+const lines = timeline(await store.weeklyHistory({ email: riley!.email }), esc);
+const historyText = [
+  `${riley!.name} <${riley!.email}> — ${riley!.department}, manager ${riley!.managerName}`,
+  `Escalated to Partners: ${totals.recent} in the last 4 weeks · ${totals.thisYear} this year · ${totals.allTime} all time`,
+  '',
+  ...lines.map(
+    (l) =>
+      `${l.weekStart}  ${(l.hoursLogged ?? 0).toFixed(1).padStart(5)} h  ${l.escalated ? 'escalated' : '         '}  ${l.details.join('; ') || '—'}`,
+  ),
+].join('\n');
+await writeFile(path.join(out, 'history-riley.txt'), historyText);
+await writeFile(path.join(out, 'history-2026.xlsx'), await exportYear(store, roster, '2026'));
+console.log(`\n${historyText}`);
+
 await close();
-console.log(`\n${captured.length} emails → ${out} (nothing was sent)`);
+console.log(
+  `\n${captured.length} emails, a history lookup and a 2026 export → ${out} (nothing was sent)`,
+);

@@ -68,8 +68,13 @@ const schema = z.object({
   ESCALATION_LOOKBACK_WEEKS: number(4),
   /** A month-over-month utilization drop this large is called out even above target. */
   UTILIZATION_DROP_POINTS: number(10),
-  /** Weekly history, send and run logs older than this are deleted (≈13 months). */
-  HISTORY_RETENTION_DAYS: number(400),
+  /**
+   * Weekly history, send and run logs older than this are deleted. Default ≈ 7
+   * years (a typical firm record-retention period); 0 = keep forever. The
+   * emails only ever look back 4 weeks and the current year — older history is
+   * reachable through `pnpm tg history`.
+   */
+  HISTORY_RETENTION_DAYS: number(2557),
 });
 
 export type Env = z.infer<typeof schema>;

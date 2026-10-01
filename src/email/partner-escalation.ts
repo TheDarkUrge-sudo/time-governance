@@ -6,6 +6,9 @@ import type { DateRange } from '../domain';
 import { escapeHtml } from '../format';
 import { type EmailContent, heading, MUTED, paragraph, pill, table, textFooter } from './layout';
 
+/** Escalated this many times in a calendar year counts as a pattern, even if not recent. */
+const YEAR_PATTERN = 3;
+
 export function renderPartnerEscalation(opts: {
   week: DateRange;
   rows: EscalationRow[];
@@ -35,27 +38,34 @@ export function renderPartnerEscalation(opts: {
       `<span style="color:${MUTED};">${escapeHtml(r.member.department)}</span>`,
       `<span style="color:${MUTED};">${escapeHtml(r.member.managerName ?? '—')}</span>`,
       `<span style="color:${MUTED};">${escapeHtml(FLAG_LABELS[r.kind])}</span>`,
-      r.weeksFlagged >= 2
+      (r.weeksFlagged >= 2
         ? pill(`${r.weeksFlagged} of last ${lookbackWeeks}`, 'red')
-        : String(r.weeksFlagged),
+        : String(r.weeksFlagged)) +
+        (r.thisYear > r.weeksFlagged
+          ? `<div style="color:${MUTED};font-size:11px;margin-top:4px;white-space:nowrap;">${r.thisYear} this year</div>`
+          : ''),
     ]),
   );
 
-  const repeat = rows.filter((r) => r.weeksFlagged >= 2);
+  // A repeat is either recent (2+ of the last 4 weeks) or a pattern across the year.
+  const repeat = rows.filter((r) => r.weeksFlagged >= 2 || r.thisYear >= YEAR_PATTERN);
+  const yearNote = (r: EscalationRow) =>
+    r.thisYear > r.weeksFlagged ? ` (${r.thisYear} this year)` : '';
   const text: string[] = [
     `Time entry still outstanding: week of ${weekLabel}`,
     '',
     'CSAs followed up on Tuesday. These employees still have not entered their time for the week:',
     ...rows.map(
       (r) =>
-        `- ${r.member.name} (${r.member.department}; manager ${r.member.managerName ?? '—'}): ${FLAG_LABELS[r.kind]}, flagged ${r.weeksFlagged} of the last ${lookbackWeeks} weeks`,
+        `- ${r.member.name} (${r.member.department}; manager ${r.member.managerName ?? '—'}): ${FLAG_LABELS[r.kind]}, flagged ${r.weeksFlagged} of the last ${lookbackWeeks} weeks${yearNote(r)}`,
     ),
   ];
 
   if (repeat.length > 0) {
-    const lines = repeat.map(
-      (r) =>
-        `${r.member.name} has now been flagged ${r.weeksFlagged} of the last ${lookbackWeeks} weeks.`,
+    const lines = repeat.map((r) =>
+      r.weeksFlagged >= 2
+        ? `${r.member.name} has now been flagged ${r.weeksFlagged} of the last ${lookbackWeeks} weeks${yearNote(r)}.`
+        : `${r.member.name} has been escalated ${r.thisYear} times this year.`,
     );
     const advice =
       'Repeat delinquency calls for a habit-correction conversation, not another reminder.';

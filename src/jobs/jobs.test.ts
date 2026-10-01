@@ -221,6 +221,8 @@ describe('jobs (PGlite + fake Karbon + fake SendGrid)', () => {
     await runTuesday(deps(state, 'live'), WEEK);
     // Alvarez was escalated two weeks ago too.
     await store.saveEscalations('2026-09-07', [{ email: alvarez.email, kind: 'no_entry' }]);
+    // …and once back in March, which only the year-to-date count sees.
+    await store.saveEscalations('2026-03-02', [{ email: alvarez.email, kind: 'no_entry' }]);
     // By Friday Chen has caught up; Alvarez has not.
     state.entries.push(...DAYS.map((d) => raw('k-chen', d, 480)));
     sent = [];
@@ -232,7 +234,8 @@ describe('jobs (PGlite + fake Karbon + fake SendGrid)', () => {
     expect(partnerEmail.subject).toBe('Time entry still outstanding: week of Sep 21 — 1 person');
     expect(partnerEmail.text).toContain('Jordan Alvarez');
     expect(partnerEmail.text).not.toContain('Riley Chen');
-    expect(partnerEmail.text).toContain('flagged 2 of the last 4 weeks');
+    expect(partnerEmail.text).toContain('flagged 2 of the last 4 weeks (3 this year)');
+    expect(partnerEmail.html).toContain('3 this year');
     expect(partnerEmail.html).toContain('2 of last 4');
     expect(await store.priorEscalationCounts('2026-09-28', 4)).toEqual(
       new Map([[alvarez.email, 2]]),

@@ -82,6 +82,8 @@ pnpm tg run tuesday|friday|monthly    # run now (sends per TG_MODE; never sends 
 pnpm tg karbon:check
 pnpm tg karbon:task-types [--days 90]
 pnpm tg karbon:clients <text>
+pnpm tg history <name or email> [--all]   # one person's weekly record
+pnpm tg history --export 2026 [--out f]   # a year's workbook for reviews
 
 pnpm start          # production: migrate + worker
 pnpm dev            # worker with reload
@@ -98,8 +100,10 @@ pnpm demo          # simulated 3-week run, fictional staff → out/demo (sends n
 - **SendGrid** — receives the email content (staff names, departments, hours,
   flags). Recipients are internal staff only. Open/click tracking is off.
 - **Postgres** — the roster, each person's weekly flags and hours, ad hoc
-  minutes per client, escalations, and send/run logs. History older than
-  `HISTORY_RETENTION_DAYS` (400 ≈ 13 months) is deleted after each Tuesday run.
+  minutes per client, escalations, and send/run logs. History is kept about
+  7 years (`HISTORY_RETENTION_DAYS`, 0 = forever) but never reported beyond
+  4 weeks and the current year; older history is reachable only through
+  `pnpm tg history`.
 - **`out/`** — dry-run previews hold real staff data; the folder is
   gitignored and CI fails if anything in it is committed.
 

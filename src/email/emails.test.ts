@@ -4,6 +4,7 @@ import { member } from '../test-fixtures';
 import { renderCsaWeekly } from './csa-weekly';
 import { CHARCOAL, wrapEmail } from './layout';
 import { renderManagerMonthly } from './manager-monthly';
+import { renderPartnerEscalation } from './partner-escalation';
 
 const week = { start: '2026-09-21', end: '2026-09-27' };
 
@@ -169,6 +170,32 @@ describe('emails', () => {
     expect(email.text).not.toContain('Jamie Ortiz dropped');
     expect(email.text).toContain('utilization 87% (target 80%), vs Aug 84% ▲ 3');
     expect(email.text).toMatch(/New Hire .*utilization 85% \(target 80%\)\n/);
+  });
+
+  it('Partner email: year-to-date count, and a year-long pattern counts as a repeat', () => {
+    const row = (name: string, weeksFlagged: number, thisYear: number) => ({
+      member: member({ name }),
+      kind: 'no_entry' as const,
+      minutes: 0,
+      weeksFlagged,
+      lookbackWeeks: 4,
+      thisYear,
+    });
+    const email = renderPartnerEscalation({
+      week,
+      historyStartsWeek: null,
+      lookbackWeeks: 4,
+      rows: [row('Riley Chen', 3, 9), row('Avery Kim', 1, 6), row('Jamie Ortiz', 1, 1)],
+    });
+    expect(email.text).toContain(
+      'Riley Chen has now been flagged 3 of the last 4 weeks (9 this year).',
+    );
+    expect(email.text).toContain('Avery Kim has been escalated 6 times this year.');
+    expect(email.text).not.toContain('Jamie Ortiz has');
+    expect(email.text).toContain(
+      'Jamie Ortiz (Audit; manager Dana Ferris): No entry, flagged 1 of the last 4 weeks\n',
+    );
+    expect(email.bodyHtml).toContain('9 this year');
   });
 
   it('says so plainly when there is nothing to flag', () => {

@@ -52,6 +52,17 @@ describe('Friday escalation', () => {
     expect(rows.map((r) => r.member.name)).toEqual(['Riley Chen']);
   });
 
+  it('counts this year, including this week', () => {
+    const rows = escalations({
+      review,
+      flaggedTuesday: new Set([alvarez.email]),
+      priorEscalations: () => 0,
+      priorThisYear: () => 5,
+      lookbackWeeks: 4,
+    });
+    expect(rows[0]!.thisYear).toBe(6);
+  });
+
   it('caps the count at the lookback window', () => {
     const rows = escalations({
       review,

@@ -102,6 +102,9 @@ export class Store {
           weekStart,
           phase,
           email: p.member.email,
+          name: p.member.name,
+          department: p.member.department,
+          managerName: p.member.managerName,
           karbonUserId: p.karbonUserId,
           flags: p.flags,
           minutes: { ...p.minutes },
@@ -134,6 +137,60 @@ export class Store {
         await tx.insert(escalations).values(rows.map((r) => ({ weekStart, ...r })));
       }
     });
+  }
+
+  /** Weekly results (both phases) for weeks in [from, before), optionally one person. */
+  async weeklyHistory(opts: { from?: string; before?: string; email?: string }) {
+    const where = [
+      opts.from ? gte(weeklyResults.weekStart, opts.from) : undefined,
+      opts.before ? lt(weeklyResults.weekStart, opts.before) : undefined,
+      opts.email ? eq(weeklyResults.email, opts.email) : undefined,
+    ].filter((w) => w !== undefined);
+    return this.db
+      .select()
+      .from(weeklyResults)
+      .where(where.length ? and(...where) : undefined)
+      .orderBy(asc(weeklyResults.weekStart), asc(weeklyResults.email));
+  }
+
+  /** Escalations for weeks in [from, before), optionally one person. */
+  async escalationHistory(opts: { from?: string; before?: string; email?: string }) {
+    const where = [
+      opts.from ? gte(escalations.weekStart, opts.from) : undefined,
+      opts.before ? lt(escalations.weekStart, opts.before) : undefined,
+      opts.email ? eq(escalations.email, opts.email) : undefined,
+    ].filter((w) => w !== undefined);
+    return this.db
+      .select()
+      .from(escalations)
+      .where(where.length ? and(...where) : undefined)
+      .orderBy(asc(escalations.weekStart), asc(escalations.email));
+  }
+
+  /** Everyone with any stored history, with the latest name/department seen for them. */
+  async peopleWithHistory(): Promise<
+    { email: string; name: string | null; department: string | null; managerName: string | null }[]
+  > {
+    const rows = await this.db
+      .selectDistinctOn([weeklyResults.email], {
+        email: weeklyResults.email,
+        name: weeklyResults.name,
+        department: weeklyResults.department,
+        managerName: weeklyResults.managerName,
+      })
+      .from(weeklyResults)
+      .orderBy(weeklyResults.email, sql`${weeklyResults.weekStart} desc`);
+    return rows;
+  }
+
+  /** Escalations per email for weeks in [from, before). */
+  async escalationCountsBetween(from: string, before: string): Promise<Map<string, number>> {
+    const rows = await this.db
+      .select({ email: escalations.email, n: sql<number>`count(*)::int` })
+      .from(escalations)
+      .where(and(gte(escalations.weekStart, from), lt(escalations.weekStart, before)))
+      .groupBy(escalations.email);
+    return new Map(rows.map((r) => [r.email, Number(r.n)]));
   }
 
   /** Escalations per email in the (lookback − 1) weeks before `weekStart`. */

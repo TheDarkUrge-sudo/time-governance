@@ -30,6 +30,14 @@ latest copy. Problems (bad email, duplicate, unknown status, a task type
 listed twice with different categories) reject the file with row numbers;
 warnings don't block.
 
+**Looking someone up.** `pnpm tg history riley` shows that person's
+weekly record for the last 52 weeks (`--all` for everything kept) and their
+escalation totals: last 4 weeks, this year, all time. It finds past staff
+too, by the name recorded each week. `pnpm tg history --export 2026`
+writes that year's workbook (Summary, Weekly detail, Escalations) to `out/`
+for performance reviews — it holds staff performance data, so keep it out of
+shared folders.
+
 **Leavers:** set Status to Inactive rather than deleting the row — inactive
 people are skipped, and the row keeps their history readable.
 

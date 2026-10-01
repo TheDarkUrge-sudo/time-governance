@@ -13,8 +13,10 @@
  *   karbon:check                   verify the Karbon credentials can read what the jobs need
  *   karbon:task-types [--days N]   task types used in Karbon recently, and how the roster classifies them
  *   karbon:clients <text>          client keys whose name contains <text> (find the internal HFA client)
+ *   history <name or email>        one person's weekly record (last 52 weeks; --all for everything)
+ *   history --export YYYY          a workbook of that calendar year for reviews [--out file.xlsx]
  */
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -33,6 +35,7 @@ import { Store } from './db/store';
 import type { Roster } from './domain';
 import { emailConfigured } from './email/sendgrid';
 import { env } from './env';
+import { escalationTotals, exportYear, findPeople, timeline } from './history/history';
 import type { JobResult } from './jobs/context';
 import { describeResults } from './jobs/deliver';
 import { runFriday } from './jobs/friday';
@@ -54,6 +57,8 @@ const { values, positionals } = parseArgs({
     roster: { type: 'string' },
     out: { type: 'string' },
     days: { type: 'string', default: '90' },
+    all: { type: 'boolean', default: false },
+    export: { type: 'string' },
   },
 });
 
@@ -75,6 +80,8 @@ async function main(): Promise<number> {
       return taskTypes();
     case 'karbon:clients':
       return findClients(arg);
+    case 'history':
+      return history(arg);
     default:
       say(
         'Usage: pnpm tg <status | roster:import <file> [--apply] | run <tuesday|friday|monthly> [--dry-run] | karbon:check | karbon:task-types | karbon:clients <text>>',
@@ -268,6 +275,74 @@ async function taskTypes(): Promise<number> {
     say(`  ${name.padEnd(40)} ${(minutes / 60).toFixed(1).padStart(8)} h   ${category}`);
   }
   return 0;
+}
+
+async function history(query: string | undefined): Promise<number> {
+  const { db, close } = connect();
+  try {
+    const store = new Store(db);
+    const roster = await store.loadRoster();
+    if (values.export) {
+      if (!/^\d{4}$/.test(values.export))
+        throw new Error('--export takes a year, e.g. --export 2026');
+      const out = path.resolve(
+        values.out ?? path.join('out', `time-governance-history-${values.export}.xlsx`),
+      );
+      await mkdir(path.dirname(out), { recursive: true });
+      await writeFile(out, await exportYear(store, roster, values.export));
+      say(
+        `Wrote ${out}`,
+        'It holds staff performance data — keep it out of shared folders and git.',
+      );
+      return 0;
+    }
+    if (!query) {
+      say('Usage: pnpm tg history <name or email> [--all]   |   pnpm tg history --export 2026');
+      return 1;
+    }
+    const matches = await findPeople(store, roster, query);
+    if (matches.length === 0) {
+      say(`Nobody on the roster or in the history matches "${query}".`);
+      return 1;
+    }
+    if (matches.length > 1) {
+      say(`"${query}" matches ${matches.length} people — be more specific:`);
+      for (const p of matches)
+        say(`  ${p.name} <${p.email}>${p.onRoster ? '' : '  (no longer on the roster)'}`);
+      return 1;
+    }
+    const person = matches[0]!;
+    const from = values.all ? undefined : addDays(today, -7 * 52);
+    const weekly = await store.weeklyHistory({ email: person.email, from });
+    const allEscalations = await store.escalationHistory({ email: person.email });
+    const totals = escalationTotals(allEscalations, today, 4);
+    const lines = timeline(
+      weekly,
+      allEscalations.filter((e) => !from || e.weekStart >= from),
+    );
+    say(
+      `${person.name} <${person.email}>${person.department ? ` — ${person.department}` : ''}${person.managerName ? `, manager ${person.managerName}` : ''}${person.onRoster ? '' : '  (no longer on the roster)'}`,
+      `Escalated to Partners: ${totals.recent} in the last 4 weeks · ${totals.thisYear} this year · ${totals.allTime} all time${totals.since ? ` (first: week of ${totals.since})` : ''}`,
+      '',
+    );
+    if (lines.length === 0) {
+      say(
+        values.all ? 'No weekly history.' : 'No weekly history in the last 52 weeks (try --all).',
+      );
+      return 0;
+    }
+    say(`${'Week of'.padEnd(12)}${'Hours'.padStart(6)}  ${'Escalated'.padEnd(10)} Flags`);
+    for (const l of lines) {
+      const hrs = l.hoursLogged === null ? '' : l.hoursLogged.toFixed(1);
+      say(
+        `${l.weekStart.padEnd(12)}${hrs.padStart(6)}  ${(l.escalated ? 'yes' : '').padEnd(10)} ${l.flags.length ? l.details.join('; ') : '—'}`,
+      );
+    }
+    if (!values.all) say('', 'Showing the last 52 weeks. Add --all for the full history.');
+    return 0;
+  } finally {
+    await close();
+  }
 }
 
 /** Client names come from each client's Ad Hoc work item (every client has one). */
