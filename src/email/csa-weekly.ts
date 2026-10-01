@@ -16,6 +16,15 @@ import {
   tiles,
 } from './layout';
 
+const CHECK_ORDER: FlagKind[] = [
+  'no_entry',
+  'minimal_entry',
+  'internal_client_billable',
+  'internal_only_role',
+  'nonbillable_unexplained',
+  'ad_hoc_work',
+];
+
 const TONE: Record<FlagKind, PillTone> = {
   no_entry: 'red',
   minimal_entry: 'amber',
@@ -34,7 +43,14 @@ export function renderCsaWeekly(opts: {
 }): EmailContent {
   const { week, people } = opts;
   const weekLabel = shortDate(week.start);
-  const flagged = people.flatMap((p) => p.flags.map((f) => ({ p, f })));
+  // Check order first (no entry, minimal, then the four checks), then name.
+  const flagged = people
+    .flatMap((p) => p.flags.map((f) => ({ p, f })))
+    .sort(
+      (a, b) =>
+        CHECK_ORDER.indexOf(a.f.kind) - CHECK_ORDER.indexOf(b.f.kind) ||
+        a.p.member.name.localeCompare(b.p.member.name),
+    );
   const count = (pred: (k: FlagKind) => boolean) => flagged.filter(({ f }) => pred(f.kind)).length;
   const noEntry = count((k) => k === 'no_entry');
   const minimal = count((k) => k === 'minimal_entry');

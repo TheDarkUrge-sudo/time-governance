@@ -48,6 +48,48 @@ describe('emails', () => {
     expect(withTable.bodyHtml).not.toContain('#BA2025');
   });
 
+  it('orders the CSA table by check, then name', () => {
+    const p = (name: string, kind: 'no_entry' | 'minimal_entry' | 'ad_hoc_work') => ({
+      member: member({ name }),
+      karbonUserId: name,
+      minutes: { total: 0, billable: 0, nonBillable: 0, pto: 0, sick: 0, unclassified: 0 },
+      minimalThresholdMinutes: 1200,
+      flags: [{ kind, minutes: 0, detail: kind }],
+    });
+    const email = renderCsaWeekly({
+      week,
+      csaName: null,
+      unmatched: [],
+      people: [p('Ann Ad', 'ad_hoc_work'), p('Zed None', 'no_entry'), p('Bo Min', 'minimal_entry')],
+    });
+    expect(email.text.indexOf('Zed None')).toBeLessThan(email.text.indexOf('Bo Min'));
+    expect(email.text.indexOf('Bo Min')).toBeLessThan(email.text.indexOf('Ann Ad'));
+  });
+
+  it('says "1 point", not "1 points"', () => {
+    const row = (target: number, utilization: number) => ({
+      member: member({ name: 'Quinn Foster' }),
+      minutes: { total: 0, billable: 0, nonBillable: 0, pto: 0, sick: 0, unclassified: 0 },
+      capacityMinutes: 6000,
+      capacitySource: 'karbon' as const,
+      utilization,
+      target,
+      underTarget: true,
+    });
+    const one = renderManagerMonthly({
+      month: '2026-09',
+      managerName: null,
+      rows: [row(0.8, 0.79)],
+    });
+    expect(one.text).toContain('Quinn Foster is 1 point under target.');
+    const tiny = renderManagerMonthly({
+      month: '2026-09',
+      managerName: null,
+      rows: [row(0.8, 0.798)],
+    });
+    expect(tiny.text).toContain('Quinn Foster is just under target.');
+  });
+
   it('says so plainly when there is nothing to flag', () => {
     const email = renderCsaWeekly({ week, csaName: 'Casey', unmatched: [], people: [] });
     expect(email.subject).toBe('Weekly time entry review: week of Sep 21 — no flags');

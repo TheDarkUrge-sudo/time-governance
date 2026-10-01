@@ -53,10 +53,12 @@ export function renderManagerMonthly(opts: {
     under.length === 0
       ? 'Everyone with a target is at or above it.'
       : under
-          .map(
-            (r) =>
-              `${r.member.name} is ${Math.round((r.target! - r.utilization!) * 100)} points under target.`,
-          )
+          .map((r) => {
+            const gap = Math.round((r.target! - r.utilization!) * 100);
+            return gap < 1
+              ? `${r.member.name} is just under target.`
+              : `${r.member.name} is ${gap} ${gap === 1 ? 'point' : 'points'} under target.`;
+          })
           .join(' ') + ' Worth a look before it becomes a pattern.';
   html += paragraph(escapeHtml(summary), { muted: true });
   if (flaggedCapacity) {
