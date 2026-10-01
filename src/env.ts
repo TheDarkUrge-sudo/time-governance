@@ -66,6 +66,8 @@ const schema = z.object({
   NONBILLABLE_MIN_DESCRIPTION_CHARS: number(10),
   INTERNAL_ONLY_ROLE_MARKER: z.preprocess(blankToUndefined, z.string().default('(Internal Only)')),
   ESCALATION_LOOKBACK_WEEKS: number(4),
+  /** A month-over-month utilization drop this large is called out even above target. */
+  UTILIZATION_DROP_POINTS: number(10),
   /** Weekly history, send and run logs older than this are deleted (≈13 months). */
   HISTORY_RETENTION_DAYS: number(400),
 });

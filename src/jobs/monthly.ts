@@ -1,6 +1,6 @@
 /** Week 2 of the month: last month's utilization, one email per manager. */
-import { monthLabel, monthRange } from '../calendar';
-import { runUtilization, type UtilizationRow } from '../checks/utilization';
+import { monthLabel, monthRange, previousMonth } from '../calendar';
+import { attachTrend, runUtilization, type UtilizationRow } from '../checks/utilization';
 import { usersByEmail } from '../checks/weekly';
 import { renderManagerMonthly } from '../email/manager-monthly';
 import { finishWithAdminSummary, type JobDeps, type JobResult, recordRun } from './context';
@@ -11,9 +11,13 @@ const CAPACITY_CONCURRENCY = 4;
 export async function runMonthly(deps: JobDeps, month: string): Promise<JobResult> {
   return recordRun(deps, 'monthly', month, async () => {
     const range = monthRange(month);
+    // Last month too, for the trend column — computed the same way from Karbon,
+    // so the trend works from the first report with no stored history.
+    const prior = previousMonth(range.start);
+    const priorRange = monthRange(prior);
     const [users, entries] = await Promise.all([
       deps.karbon.listUsers(),
-      deps.karbon.listTimeEntries(range),
+      deps.karbon.listTimeEntries({ start: priorRange.start, end: range.end }),
     ]);
 
     // Capacity is per user (GET /v3/Users/{id}); only fetch it for roster staff.
@@ -29,14 +33,17 @@ export async function runMonthly(deps: JobDeps, month: string): Promise<JobResul
       batch.forEach((id, j) => capacity.set(id, values[j] ?? null));
     }
 
-    const report = runUtilization({
-      month: range,
+    const inputs = {
       roster: deps.roster,
       users,
       entries,
       capacityMinutesPerWeek: capacity,
       policy: deps.policy,
-    });
+    };
+    const report = attachTrend(
+      runUtilization({ ...inputs, month: range }),
+      runUtilization({ ...inputs, month: priorRange }),
+    );
 
     const byManager = new Map<string, UtilizationRow[]>();
     const noManager: UtilizationRow[] = [];
@@ -59,8 +66,10 @@ export async function runMonthly(deps: JobDeps, month: string): Promise<JobResul
           to: [email],
           content: renderManagerMonthly({
             month,
+            previousMonth: prior,
             managerName: rows[0]!.member.managerName,
             rows,
+            dropPoints: deps.policy.utilizationDropPoints,
           }),
         }),
       );

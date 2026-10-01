@@ -24,6 +24,8 @@ export interface UtilizationRow {
   utilization: number | null;
   target: number | null;
   underTarget: boolean;
+  /** Last month's utilization, for the trend; null when there is no figure to compare. */
+  previousUtilization?: number | null;
 }
 
 export interface UtilizationReport {
@@ -89,4 +91,36 @@ export function runUtilization(input: {
 
   rows.sort((a, b) => a.member.name.localeCompare(b.member.name));
   return { month, rows, unmatched: unmatched.sort((a, b) => a.name.localeCompare(b.name)) };
+}
+
+/**
+ * Change in whole percentage points vs. last month, computed from the rounded
+ * percentages so it always agrees with the two numbers the email shows.
+ * Null when either month has no figure (new hire, no capacity).
+ */
+export function trendPoints(row: UtilizationRow): number | null {
+  if (row.utilization === null || row.previousUtilization == null) return null;
+  return Math.round(row.utilization * 100) - Math.round(row.previousUtilization * 100);
+}
+
+/**
+ * Adds last month's utilization to each row (matched by email). A month with
+ * no time logged at all is "nothing to compare", not 0% — otherwise someone's
+ * first month in Karbon (e.g. a practice moving over from Axcess) reads as a
+ * huge jump.
+ */
+export function attachTrend(
+  current: UtilizationReport,
+  previous: UtilizationReport,
+): UtilizationReport {
+  const prior = new Map(
+    previous.rows.filter((r) => r.minutes.total > 0).map((r) => [r.member.email, r.utilization]),
+  );
+  return {
+    ...current,
+    rows: current.rows.map((r) => ({
+      ...r,
+      previousUtilization: prior.get(r.member.email) ?? null,
+    })),
+  };
 }

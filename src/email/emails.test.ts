@@ -43,7 +43,13 @@ describe('emails', () => {
     );
     expect(html.match(/#BA2025/g)).toHaveLength(1);
     expect(html).not.toMatch(/#8B1A1A/i);
-    const withTable = renderManagerMonthly({ month: '2026-09', managerName: null, rows: [] });
+    const withTable = renderManagerMonthly({
+      month: '2026-09',
+      previousMonth: '2026-08',
+      managerName: null,
+      rows: [],
+      dropPoints: 10,
+    });
     expect(withTable.bodyHtml).toContain(`background-color:${CHARCOAL}`);
     expect(withTable.bodyHtml).not.toContain('#BA2025');
   });
@@ -78,14 +84,18 @@ describe('emails', () => {
     });
     const one = renderManagerMonthly({
       month: '2026-09',
+      previousMonth: '2026-08',
       managerName: null,
       rows: [row(0.8, 0.79)],
+      dropPoints: 10,
     });
     expect(one.text).toContain('Quinn Foster is 1 point under target.');
     const tiny = renderManagerMonthly({
       month: '2026-09',
+      previousMonth: '2026-08',
       managerName: null,
       rows: [row(0.8, 0.798)],
+      dropPoints: 10,
     });
     expect(tiny.text).toContain('Quinn Foster is just under target.');
   });
@@ -124,6 +134,41 @@ describe('emails', () => {
     expect(email.text).toContain('    Tue Sep 22 · Acme Corp · 1.0 h · Admin · “call”');
     expect(email.text).toContain('    +2 more entries');
     expect(email.bodyHtml).toContain('Tue Sep 22 · Acme Corp · 1.0 h · Admin · “call”');
+  });
+
+  it('shows the month-over-month trend and calls out drops', () => {
+    const row = (name: string, utilization: number, previousUtilization: number | null) => ({
+      member: member({ name }),
+      minutes: { total: 0, billable: 0, nonBillable: 0, pto: 0, sick: 0, unclassified: 0 },
+      capacityMinutes: 6000,
+      capacitySource: 'karbon' as const,
+      utilization,
+      previousUtilization,
+      target: 0.8,
+      underTarget: utilization < 0.8,
+    });
+    const email = renderManagerMonthly({
+      month: '2026-09',
+      previousMonth: '2026-08',
+      managerName: 'Dana Ferris',
+      dropPoints: 10,
+      rows: [
+        row('Riley Chen', 0.44, 0.52), // under target, falling
+        row('Avery Kim', 0.83, 0.95), // above target, but a sharp drop
+        row('Jamie Ortiz', 0.87, 0.84), // fine
+        row('New Hire', 0.85, null), // nothing to compare
+      ],
+    });
+    expect(email.bodyHtml).toContain('vs. Aug');
+    expect(email.bodyHtml).toContain('▼ 8');
+    expect(email.bodyHtml).toContain('▲ 3');
+    expect(email.text).toContain('Riley Chen is 36 points under target, down 8 from August.');
+    expect(email.text).toContain(
+      'Avery Kim dropped 12 points from August, though still at target.',
+    );
+    expect(email.text).not.toContain('Jamie Ortiz dropped');
+    expect(email.text).toContain('utilization 87% (target 80%), vs Aug 84% ▲ 3');
+    expect(email.text).toMatch(/New Hire .*utilization 85% \(target 80%\)\n/);
   });
 
   it('says so plainly when there is nothing to flag', () => {

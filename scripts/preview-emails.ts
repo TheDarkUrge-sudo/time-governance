@@ -96,6 +96,8 @@ const emails: Record<string, EmailContent> = {
   }),
   'manager-monthly': renderManagerMonthly({
     month: '2026-09',
+    previousMonth: '2026-08',
+    dropPoints: 10,
     managerName: 'Dana Ferris',
     rows: [
       [chen, 124, 18, 8, 0, 176],
@@ -117,6 +119,7 @@ const emails: Record<string, EmailContent> = {
         capacityMinutes,
         capacitySource: 'karbon',
         utilization,
+        previousUtilization: utilization + 0.05,
         target: 0.8,
         underTarget: utilization < 0.8,
       } satisfies UtilizationRow;

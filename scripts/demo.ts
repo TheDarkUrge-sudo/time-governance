@@ -321,8 +321,15 @@ for (const monday of weeks) {
   await runFriday(deps, weekOf(monday));
   all.push(...w.tuesday, ...w.friday);
 }
-// The rest of September (and Aug 31's week) for the monthly report, all clean.
-for (const monday of ['2026-08-31', '2026-09-28']) {
+// All of August (the trend's comparison month) and the rest of September, all clean.
+for (const monday of [
+  '2026-08-03',
+  '2026-08-10',
+  '2026-08-17',
+  '2026-08-24',
+  '2026-08-31',
+  '2026-09-28',
+]) {
   for (const m of members)
     if (!m.excluded && m.name !== 'Chris Vale') all.push(...cleanWeek(m, monday));
 }

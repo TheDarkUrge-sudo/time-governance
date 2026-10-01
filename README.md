@@ -35,6 +35,12 @@ Utilization = billable ÷ capacity. Capacity = the person's Karbon
 excluded, PTO not). Without a Karbon capacity it falls back to the roster's
 Expected Weekly Hours, then 40 h — and the report marks it with an asterisk.
 
+The report also shows each person's change from the previous month ("vs.
+Aug ▼ 8"), computed the same way from Karbon in the same run, so it works
+from the first report. The summary names everyone under target with their
+trend, and anyone who dropped 10+ points even if still at target. A month
+with no time logged is "nothing to compare", not 0%.
+
 Each indicator flag in the CSA email lists the entries behind it (date,
 client, hours, task type, and the description where it matters), up to five,
 so CSAs can follow up without opening Karbon.

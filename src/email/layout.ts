@@ -64,7 +64,7 @@ export function table(columns: Column[], rows: string[][]): string {
   const th = columns
     .map(
       (c) =>
-        `<td style="padding:9px 8px;color:#ffffff;font-weight:bold;text-align:${c.align ?? 'left'};">${escapeHtml(c.label)}</td>`,
+        `<td style="padding:9px 8px;color:#ffffff;font-weight:bold;white-space:nowrap;text-align:${c.align ?? 'left'};">${escapeHtml(c.label)}</td>`,
     )
     .join('');
   const body = rows

@@ -254,6 +254,7 @@ describe('jobs (PGlite + fake Karbon + fake SendGrid)', () => {
         raw('k-alvarez', '2026-09-02', 100 * 60),
         raw('k-chen', '2026-09-03', 150 * 60),
         raw('k-okafor', '2026-09-04', 120 * 60),
+        raw('k-alvarez', '2026-08-05', 120 * 60), // August: 120 of 168 h → 71%
       ],
       capacity: { 'k-alvarez': 2400 },
     };
@@ -262,7 +263,11 @@ describe('jobs (PGlite + fake Karbon + fake SendGrid)', () => {
     expect(reports.map((m) => m.to)).toEqual([['dferris@hfacpas.com'], ['spatel@hfacpas.com']]);
     expect(reports[0]!.text).toContain('Jordan Alvarez (Audit): billable 100.0h');
     expect(reports[0]!.text).toMatch(/Jordan Alvarez.*capacity 176\.0h, utilization 57%/);
-    expect(reports[0]!.text).toContain('Jordan Alvarez is 23 points under target.');
+    expect(reports[0]!.text).toContain(
+      'Jordan Alvarez is 23 points under target, down 14 from August.',
+    );
+    // Riley Chen logged nothing in August: no comparison, rather than "up 85".
+    expect(reports[0]!.text).toMatch(/Riley Chen .*utilization 85% \(target 80%\)\n/);
     expect(result.summary).toMatchObject({ people: 3, managers: 2 });
   });
 

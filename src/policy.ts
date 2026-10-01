@@ -11,6 +11,7 @@ export function policyFromEnv(): Policy {
     nonBillableMinDescriptionChars: env.NONBILLABLE_MIN_DESCRIPTION_CHARS,
     internalOnlyRoleMarker: env.INTERNAL_ONLY_ROLE_MARKER,
     escalationLookbackWeeks: env.ESCALATION_LOOKBACK_WEEKS,
+    utilizationDropPoints: env.UTILIZATION_DROP_POINTS,
   };
 }
 
@@ -24,4 +25,5 @@ export const DEFAULT_POLICY: Policy = {
   nonBillableMinDescriptionChars: 10,
   internalOnlyRoleMarker: '(Internal Only)',
   escalationLookbackWeeks: 4,
+  utilizationDropPoints: 10,
 };

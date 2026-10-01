@@ -125,6 +125,16 @@ export function shortDate(iso: string): string {
   return `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`;
 }
 
+/** "Aug" for 2026-08 */
+export function shortMonth(month: string): string {
+  return MONTHS[Number(month.slice(5, 7)) - 1]!;
+}
+
+/** "August" for 2026-08 */
+export function monthName(month: string): string {
+  return LONG_MONTHS[Number(month.slice(5, 7)) - 1]!;
+}
+
 /** "September 2026" */
 export function monthLabel(month: string): string {
   return `${LONG_MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;

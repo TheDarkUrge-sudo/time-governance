@@ -84,4 +84,6 @@ export interface Policy {
   nonBillableMinDescriptionChars: number;
   internalOnlyRoleMarker: string;
   escalationLookbackWeeks: number;
+  /** A month-over-month utilization drop (points) worth calling out even above target. */
+  utilizationDropPoints: number;
 }
