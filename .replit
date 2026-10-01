@@ -1,0 +1,9 @@
+modules = ["nodejs-24", "postgresql-16"]
+
+[deployment]
+# A worker with no web server. In the Replit Deployments UI choose
+# "Reserved VM" → "Background Worker" — never Autoscale: a sleeping instance
+# never fires the Tuesday/Friday/monthly schedules. The deployment type is
+# chosen in that UI, so no deploymentTarget is pinned here.
+build = ["sh", "-c", "pnpm install --frozen-lockfile"]
+run = ["sh", "-c", "pnpm start"]

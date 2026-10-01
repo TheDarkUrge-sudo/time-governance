@@ -1,0 +1,8 @@
+# Supply-chain guard (same posture as Clarity): a package version must be at
+# least one day old before pnpm will install it. Do not disable.
+minimumReleaseAge: 1440
+
+autoInstallPeers: false
+
+onlyBuiltDependencies:
+  - esbuild
