@@ -11,7 +11,10 @@ Automates the firm's Time Governance SOP (v1.0, June 2026) from Karbon's API:
 | After every run                      | What was sent, plus anything on the roster that needs fixing                                                         | `TG_ADMIN_TO`             |
 
 It is a standalone worker — no web UI. The roster is a spreadsheet you upload
-with one command; everything else runs on schedule.
+with one command; everything else runs on schedule. It runs anywhere that can
+run Node 24 or a container, with Postgres: **Azure** ([docs/azure.md](docs/azure.md),
+recommended — data stays in the firm's tenant) or **Replit** (`.replit`).
+Admin commands run from a laptop in VS Code.
 
 ## The checks
 
@@ -49,11 +52,15 @@ All thresholds are environment settings (see `.env.example`).
 
 ## Set up
 
-1. **Replit project** from this repo; add the PostgreSQL module (sets `DATABASE_URL`).
+1. **Host and database** — Azure: follow [docs/azure.md](docs/azure.md).
+   Replit: a project from this repo with the PostgreSQL module (sets
+   `DATABASE_URL`), deployed as a Reserved VM → Background Worker.
 2. **Secrets** — Karbon (`KARBON_API_KEY`, `KARBON_API_SECRET`), SendGrid
    (`SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`), `TG_SHADOW_TO` (the COO),
    `TG_ADMIN_TO`. Leave `TG_MODE` unset (= `shadow`).
-3. `pnpm install` then `pnpm db:migrate`.
+3. **A laptop for admin commands** — VS Code, Node 24, `pnpm install`, and a
+   `.env` pointing at the same database with `TG_MODE=off`
+   ([details](docs/azure.md#running-admin-commands-from-vs-code)).
 4. `pnpm tg karbon:check` — confirms the credentials can read users, time
    entries, capacity and the Ad Hoc work items.
 5. The internal client is found by its client ID, **99999** by default
@@ -65,9 +72,9 @@ All thresholds are environment settings (see `.env.example`).
 8. **Dry run against real data** — `pnpm tg run tuesday --dry-run`. Nothing
    is sent or saved; the emails are written to `out/`. Compare them with
    what the CSAs found by hand.
-9. **Deploy** as a Reserved VM → Background Worker (`pnpm start` migrates,
-   then starts the schedules). It runs in shadow mode: every email goes to
-   `TG_SHADOW_TO` with a banner naming the real recipients.
+9. **Start the worker** (it applies migrations, then runs the schedules). It
+   starts in shadow mode: every email goes to `TG_SHADOW_TO` with a banner
+   naming the real recipients.
 10. **Go live** per [docs/operations.md](docs/operations.md#rollout): two
     clean shadow Tuesdays, two Fridays, one month — then `TG_MODE=live`.
 
@@ -85,7 +92,7 @@ pnpm tg karbon:clients <text>
 pnpm tg history <name or email> [--all]   # one person's weekly record
 pnpm tg history --export 2026 [--out f]   # a year's workbook for reviews
 
-pnpm start          # production: migrate + worker
+pnpm start          # production: migrate + worker (the Docker image does the same)
 pnpm dev            # worker with reload
 pnpm check          # format:check → typecheck → lint → test (CI order)
 pnpm db:generate    # after changing src/db/schema.ts — commit the SQL

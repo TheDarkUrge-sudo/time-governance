@@ -30,3 +30,5 @@ jobs:
           pnpm run db:generate
           git diff --exit-code migrations || (echo "::error::src/db/schema.ts changed without a generated migration — run pnpm db:generate and commit it" && exit 1)
           test -z "$(git status --porcelain migrations)"
+      - name: Docker image builds
+        run: docker build -t time-governance:ci .
