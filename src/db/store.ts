@@ -1,0 +1,313 @@
+/** Every read and write the jobs make. Thin: SQL in, domain shapes out. */
+import { and, asc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+
+import { addDays } from '../calendar';
+import type { AdHocUsage, PersonWeek } from '../checks/weekly';
+import { MISSING_KINDS } from '../checks/weekly';
+import type { Roster } from '../domain';
+import type { Db } from './client';
+import {
+  adHocUsage,
+  emailSends,
+  escalations,
+  holidays,
+  jobRuns,
+  recipients,
+  rosterImports,
+  rosterMembers,
+  taskTypes,
+  weeklyResults,
+} from './schema';
+
+export type JobName = 'tuesday' | 'friday' | 'monthly';
+export type SendMode = 'shadow' | 'live';
+
+export class Store {
+  constructor(readonly db: Db) {}
+
+  /* ── Roster ───────────────────────────────────────────────────────────── */
+
+  async loadRoster(): Promise<Roster> {
+    const [members, recips, types, days] = await Promise.all([
+      this.db.select().from(rosterMembers).orderBy(asc(rosterMembers.name)),
+      this.db.select().from(recipients).orderBy(asc(recipients.id)),
+      this.db.select().from(taskTypes),
+      this.db.select().from(holidays).orderBy(asc(holidays.date)),
+    ]);
+    return {
+      members: members.map((m) => ({
+        name: m.name,
+        email: m.email,
+        department: m.department,
+        managerName: m.managerName,
+        managerEmail: m.managerEmail,
+        csaSlot: m.csaSlot,
+        active: m.active,
+        utilizationTarget: m.utilizationTarget,
+        expectedWeeklyHours: m.expectedWeeklyHours,
+        excluded: m.excluded,
+        hireDate: m.hireDate,
+      })),
+      recipients: recips.map((r) => ({ role: r.role, slot: r.slot, name: r.name, email: r.email })),
+      taskTypes: new Map(types.map((t) => [t.key, t.category])),
+      holidays: days.map((h) => ({ date: h.date, name: h.name })),
+    };
+  }
+
+  /** Replaces the whole roster in one transaction, and records the upload. */
+  async replaceRoster(
+    roster: Roster,
+    audit: { fileName: string; changes: string[]; warnings: string[] },
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(rosterMembers);
+      await tx.delete(recipients);
+      await tx.delete(taskTypes);
+      await tx.delete(holidays);
+      if (roster.members.length > 0) await tx.insert(rosterMembers).values(roster.members);
+      if (roster.recipients.length > 0) await tx.insert(recipients).values(roster.recipients);
+      if (roster.taskTypes.size > 0) {
+        await tx
+          .insert(taskTypes)
+          .values([...roster.taskTypes].map(([key, category]) => ({ key, category })));
+      }
+      if (roster.holidays.length > 0) await tx.insert(holidays).values(roster.holidays);
+      await tx.insert(rosterImports).values(audit);
+    });
+  }
+
+  async lastRosterImport(): Promise<{ fileName: string; createdAt: Date } | null> {
+    const rows = await this.db
+      .select({ fileName: rosterImports.fileName, createdAt: rosterImports.createdAt })
+      .from(rosterImports)
+      .orderBy(sql`${rosterImports.id} desc`)
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  /* ── Weekly history ───────────────────────────────────────────────────── */
+
+  async saveWeeklyResults(
+    weekStart: string,
+    phase: 'tuesday' | 'friday',
+    people: PersonWeek[],
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(weeklyResults)
+        .where(and(eq(weeklyResults.weekStart, weekStart), eq(weeklyResults.phase, phase)));
+      if (people.length === 0) return;
+      await tx.insert(weeklyResults).values(
+        people.map((p) => ({
+          weekStart,
+          phase,
+          email: p.member.email,
+          karbonUserId: p.karbonUserId,
+          flags: p.flags,
+          minutes: { ...p.minutes },
+        })),
+      );
+    });
+  }
+
+  /** Emails the Tuesday review flagged for missing or minimal time; null if Tuesday never ran. */
+  async tuesdayMissing(weekStart: string): Promise<Set<string> | null> {
+    const rows = await this.db
+      .select({ email: weeklyResults.email, flags: weeklyResults.flags })
+      .from(weeklyResults)
+      .where(and(eq(weeklyResults.weekStart, weekStart), eq(weeklyResults.phase, 'tuesday')));
+    if (rows.length === 0) {
+      const ran = await this.lastRun('tuesday', weekStart);
+      if (ran?.status !== 'ok') return null;
+    }
+    return new Set(
+      rows
+        .filter((r) => r.flags.some((f) => MISSING_KINDS.has(f.kind as never)))
+        .map((r) => r.email),
+    );
+  }
+
+  async saveEscalations(weekStart: string, rows: { email: string; kind: string }[]): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(escalations).where(eq(escalations.weekStart, weekStart));
+      if (rows.length > 0) {
+        await tx.insert(escalations).values(rows.map((r) => ({ weekStart, ...r })));
+      }
+    });
+  }
+
+  /** Escalations per email in the (lookback − 1) weeks before `weekStart`. */
+  async priorEscalationCounts(
+    weekStart: string,
+    lookbackWeeks: number,
+  ): Promise<Map<string, number>> {
+    const from = addDays(weekStart, -7 * Math.max(0, lookbackWeeks - 1));
+    const rows = await this.db
+      .select({ email: escalations.email, n: sql<number>`count(*)::int` })
+      .from(escalations)
+      .where(and(gte(escalations.weekStart, from), lt(escalations.weekStart, weekStart)))
+      .groupBy(escalations.email);
+    return new Map(rows.map((r) => [r.email, Number(r.n)]));
+  }
+
+  /** The first week a Friday run completed — where "weeks flagged" history begins. */
+  async firstFridayWeek(): Promise<string | null> {
+    const rows = await this.db
+      .select({ period: jobRuns.period })
+      .from(jobRuns)
+      .where(and(eq(jobRuns.job, 'friday'), eq(jobRuns.status, 'ok')))
+      .orderBy(asc(jobRuns.period))
+      .limit(1);
+    return rows[0]?.period ?? null;
+  }
+
+  async saveAdHocUsage(weekStart: string, usage: AdHocUsage[]): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(adHocUsage).where(eq(adHocUsage.weekStart, weekStart));
+      if (usage.length === 0) return;
+      await tx.insert(adHocUsage).values(
+        usage.map((u) => ({
+          weekStart,
+          karbonUserId: u.userKey,
+          clientKey: u.clientKey,
+          minutes: u.minutes,
+        })),
+      );
+    });
+  }
+
+  /**
+   * A lookup of how many consecutive weeks, immediately before `weekStart`,
+   * each user logged ad hoc time to each client.
+   */
+  async adHocStreaks(
+    weekStart: string,
+    maxWeeks: number,
+  ): Promise<(userKey: string, clientKey: string) => number> {
+    const from = addDays(weekStart, -7 * maxWeeks);
+    const rows = await this.db
+      .select({
+        weekStart: adHocUsage.weekStart,
+        user: adHocUsage.karbonUserId,
+        client: adHocUsage.clientKey,
+      })
+      .from(adHocUsage)
+      .where(and(gte(adHocUsage.weekStart, from), lt(adHocUsage.weekStart, weekStart)));
+    const weeks = new Map<string, Set<string>>();
+    for (const r of rows) {
+      const k = `${r.user}|${r.client}`;
+      const s = weeks.get(k) ?? new Set<string>();
+      s.add(r.weekStart);
+      weeks.set(k, s);
+    }
+    return (userKey, clientKey) => {
+      const s = weeks.get(`${userKey}|${clientKey}`);
+      if (!s) return 0;
+      let n = 0;
+      for (let w = addDays(weekStart, -7); s.has(w); w = addDays(w, -7)) n++;
+      return n;
+    };
+  }
+
+  /** Deletes weekly history, sends and runs from before `cutoff` (YYYY-MM-DD). */
+  async purgeHistoryBefore(cutoff: string): Promise<void> {
+    const at = new Date(`${cutoff}T00:00:00Z`);
+    await this.db.transaction(async (tx) => {
+      await tx.delete(weeklyResults).where(lt(weeklyResults.weekStart, cutoff));
+      await tx.delete(escalations).where(lt(escalations.weekStart, cutoff));
+      await tx.delete(adHocUsage).where(lt(adHocUsage.weekStart, cutoff));
+      await tx.delete(emailSends).where(lt(emailSends.createdAt, at));
+      await tx.delete(jobRuns).where(lt(jobRuns.startedAt, at));
+    });
+  }
+
+  /* ── Sends ────────────────────────────────────────────────────────────── */
+
+  /** Claims a send; returns its id, or null if it was already claimed (sent or in flight). */
+  async claimSend(c: {
+    kind: string;
+    period: string;
+    recipient: string;
+    mode: SendMode;
+    deliveredTo: string;
+    subject: string;
+  }): Promise<number | null> {
+    const rows = await this.db
+      .insert(emailSends)
+      .values({ ...c, status: 'sending' })
+      .onConflictDoNothing()
+      .returning({ id: emailSends.id });
+    return rows[0]?.id ?? null;
+  }
+
+  async markSent(id: number, messageId: string): Promise<void> {
+    await this.db
+      .update(emailSends)
+      .set({ status: 'sent', messageId, sentAt: new Date() })
+      .where(eq(emailSends.id, id));
+  }
+
+  async releaseSend(id: number): Promise<void> {
+    await this.db.delete(emailSends).where(eq(emailSends.id, id));
+  }
+
+  async sendsFor(kind: string, period: string) {
+    return this.db
+      .select()
+      .from(emailSends)
+      .where(and(eq(emailSends.kind, kind), eq(emailSends.period, period)));
+  }
+
+  /* ── Runs ─────────────────────────────────────────────────────────────── */
+
+  async startRun(job: JobName, period: string): Promise<number> {
+    const rows = await this.db
+      .insert(jobRuns)
+      .values({ job, period, status: 'running' })
+      .returning({ id: jobRuns.id });
+    return rows[0]!.id;
+  }
+
+  async finishRun(
+    id: number,
+    outcome: { status: 'ok' | 'failed'; summary?: Record<string, unknown>; error?: string },
+  ): Promise<void> {
+    await this.db
+      .update(jobRuns)
+      .set({ ...outcome, finishedAt: new Date() })
+      .where(eq(jobRuns.id, id));
+  }
+
+  async lastRun(job: JobName, period: string) {
+    const rows = await this.db
+      .select()
+      .from(jobRuns)
+      .where(and(eq(jobRuns.job, job), eq(jobRuns.period, period)))
+      .orderBy(sql`${jobRuns.id} desc`)
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async recentRuns(limit = 10) {
+    return this.db
+      .select()
+      .from(jobRuns)
+      .orderBy(sql`${jobRuns.id} desc`)
+      .limit(limit);
+  }
+
+  async countRoster(): Promise<{ members: number; taskTypes: number }> {
+    const [m] = await this.db.select({ n: sql<number>`count(*)::int` }).from(rosterMembers);
+    const [t] = await this.db.select({ n: sql<number>`count(*)::int` }).from(taskTypes);
+    return { members: Number(m?.n ?? 0), taskTypes: Number(t?.n ?? 0) };
+  }
+
+  /** Test/maintenance helper: names of claimed sends for a set of kinds. */
+  async sentRecipients(kinds: string[]): Promise<string[]> {
+    const rows = await this.db
+      .select({ r: emailSends.recipient })
+      .from(emailSends)
+      .where(inArray(emailSends.kind, kinds));
+    return rows.map((r) => r.r);
+  }
+}
