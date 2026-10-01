@@ -25,6 +25,14 @@ to it. Change one only deliberately, and record the change here.
 
 ## Open follow-ups
 
+- **Timeliness.** Every check looks at the week's totals, so someone who enters a
+  whole week late still passes. Karbon records each entry's `CreatedDate`; the
+  share of time entered more than a few days after the work could be shown in
+  the Partner and Manager emails (information first, a flag later).
+- **Realization.** The SOP mentions it; time entries carry `BilledStatus` and
+  rates, so a later report could show worked vs. billed.
 - The SOP's "training codes on first-year clients" rule could become a fifth
   check; it needs a first-year flag per client.
+- Calibrate `MINIMAL_WEEK_HOURS` (20 h) and the 10-character description test
+  against the first dry runs on real data.
 - Department-specific time-entry guides (SOP, "planned as a follow-on").

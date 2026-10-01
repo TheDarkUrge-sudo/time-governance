@@ -4,7 +4,7 @@
  * with a capturing mail transport (nothing is sent anywhere). Three weeks run
  * in sequence so the Friday "weeks flagged" history has something to count.
  *
- * Usage: pnpm tsx scripts/demo.ts   → out/demo/*.html
+ * Usage: pnpm demo   → out/demo/*.html
  */
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';

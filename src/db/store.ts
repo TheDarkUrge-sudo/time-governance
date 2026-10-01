@@ -1,5 +1,5 @@
 /** Every read and write the jobs make. Thin: SQL in, domain shapes out. */
-import { and, asc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, lt, sql } from 'drizzle-orm';
 
 import { addDays } from '../calendar';
 import type { AdHocUsage, PersonWeek } from '../checks/weekly';
@@ -258,13 +258,6 @@ export class Store {
     await this.db.delete(emailSends).where(eq(emailSends.id, id));
   }
 
-  async sendsFor(kind: string, period: string) {
-    return this.db
-      .select()
-      .from(emailSends)
-      .where(and(eq(emailSends.kind, kind), eq(emailSends.period, period)));
-  }
-
   /* ── Runs ─────────────────────────────────────────────────────────────── */
 
   async startRun(job: JobName, period: string): Promise<number> {
@@ -307,14 +300,5 @@ export class Store {
     const [m] = await this.db.select({ n: sql<number>`count(*)::int` }).from(rosterMembers);
     const [t] = await this.db.select({ n: sql<number>`count(*)::int` }).from(taskTypes);
     return { members: Number(m?.n ?? 0), taskTypes: Number(t?.n ?? 0) };
-  }
-
-  /** Test/maintenance helper: names of claimed sends for a set of kinds. */
-  async sentRecipients(kinds: string[]): Promise<string[]> {
-    const rows = await this.db
-      .select({ r: emailSends.recipient })
-      .from(emailSends)
-      .where(inArray(emailSends.kind, kinds));
-    return rows.map((r) => r.r);
   }
 }

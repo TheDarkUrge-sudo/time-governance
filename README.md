@@ -88,7 +88,7 @@ pnpm dev            # worker with reload
 pnpm check          # format:check → typecheck → lint → test (CI order)
 pnpm db:generate    # after changing src/db/schema.ts — commit the SQL
 pnpm template       # rebuild templates/HFA_Staff_Roster_Template.xlsx
-pnpm tsx scripts/preview-emails.ts   # sample-data email previews → out/previews
+pnpm demo          # simulated 3-week run, fictional staff → out/demo (sends nothing)
 ```
 
 ## Data

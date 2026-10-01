@@ -21,7 +21,8 @@
     "check": "pnpm run format:check && pnpm run typecheck && pnpm run lint && pnpm run test",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "tsx scripts/migrate.ts",
-    "template": "tsx scripts/build-template.ts"
+    "template": "tsx scripts/build-template.ts",
+    "demo": "tsx scripts/demo.ts"
   },
   "dependencies": {
     "dotenv": "17.4.2",

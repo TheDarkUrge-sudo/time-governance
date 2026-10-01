@@ -16,10 +16,3 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
-
-/** "Riley Chen" → "R. Chen" (the samples' style; single names pass through). */
-export function shortName(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length < 2) return name.trim();
-  return `${parts[0]!.charAt(0)}. ${parts.slice(1).join(' ')}`;
-}

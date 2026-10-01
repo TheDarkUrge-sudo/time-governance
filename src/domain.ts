@@ -6,8 +6,6 @@
 /** How the firm classifies a Karbon task type (the roster workbook's Task Types tab). */
 export type TaskCategory = 'billable' | 'non_billable' | 'pto' | 'sick';
 
-export const TASK_CATEGORIES: readonly TaskCategory[] = ['billable', 'non_billable', 'pto', 'sick'];
-
 export interface RosterMember {
   name: string;
   /** Lower-cased; the join key to Karbon users. */

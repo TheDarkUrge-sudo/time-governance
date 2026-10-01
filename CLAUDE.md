@@ -35,6 +35,9 @@ database is in-process PGlite with the real migrations (`src/db/test-db.ts`).
   the mode (off/shadow/live), claims each send, writes dry-run previews.
 - `src/db/` — Drizzle schema, `Store` (all SQL), migrations in `migrations/`.
 - `src/worker.ts` — node-cron schedules in `FIRM_TIMEZONE`. `src/cli.ts` — the CLI.
+- `scripts/demo.ts` (`pnpm demo`) — the real jobs over three weeks of fictional
+  staff against a fake Karbon; emails land in `out/demo`. Re-run it after any
+  email or rule change to see the result.
 
 ## Rules
 
