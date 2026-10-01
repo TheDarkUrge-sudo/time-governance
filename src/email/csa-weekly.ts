@@ -1,6 +1,13 @@
 /** Tuesday: one email per CSA, covering only the staff assigned to their slot. */
-import { shortDate } from '../calendar';
-import { FLAG_LABELS, type FlagKind, MISSING_KINDS, type PersonWeek } from '../checks/weekly';
+import { dayLabel, shortDate } from '../calendar';
+import {
+  type Flag,
+  FLAG_LABELS,
+  type FlagEntry,
+  type FlagKind,
+  MISSING_KINDS,
+  type PersonWeek,
+} from '../checks/weekly';
 import type { DateRange, RosterMember } from '../domain';
 import { escapeHtml, hours } from '../format';
 import {
@@ -24,6 +31,30 @@ const CHECK_ORDER: FlagKind[] = [
   'nonbillable_unexplained',
   'ad_hoc_work',
 ];
+
+/** Entries shown under one flag; the rest are summarized as "+N more". */
+const MAX_ENTRIES = 5;
+
+/** "Tue Sep 22 · Acme Manufacturing · 2.0 h · Admin · “call”" */
+function entryLine(kind: FlagKind, e: FlagEntry): string {
+  const parts = [dayLabel(e.date), e.client, `${hours(e.minutes)} h`];
+  if (e.taskType) parts.push(e.taskType);
+  if (kind === 'internal_only_role' && e.role) parts.push(e.role);
+  if (kind === 'nonbillable_unexplained' || kind === 'ad_hoc_work') {
+    parts.push(e.description ? `“${e.description}”` : '(no description)');
+  }
+  return parts.join(' · ');
+}
+
+function entryLines(f: Flag): string[] {
+  const list = f.entries ?? [];
+  const lines = list.slice(0, MAX_ENTRIES).map((e) => entryLine(f.kind, e));
+  if (list.length > MAX_ENTRIES) {
+    const more = list.length - MAX_ENTRIES;
+    lines.push(`+${more} more ${more === 1 ? 'entry' : 'entries'}`);
+  }
+  return lines;
+}
 
 const TONE: Record<FlagKind, PillTone> = {
   no_entry: 'red',
@@ -93,7 +124,14 @@ export function renderCsaWeekly(opts: {
       flagged.map(({ p, f }) => [
         escapeHtml(p.member.name),
         `<span style="color:${MUTED};">${escapeHtml(p.member.department)}</span>`,
-        `${pill(FLAG_LABELS[f.kind], TONE[f.kind])}<div style="color:${MUTED};font-size:11px;margin-top:4px;">${escapeHtml(f.detail)}</div>`,
+        `${pill(FLAG_LABELS[f.kind], TONE[f.kind])}<div style="color:${MUTED};font-size:11px;margin-top:4px;">${escapeHtml(f.detail)}</div>${entryLines(
+          f,
+        )
+          .map(
+            (l) =>
+              `<div style="color:#888888;font-size:11px;margin-top:2px;padding-left:8px;border-left:2px solid #E5E5E5;">${escapeHtml(l)}</div>`,
+          )
+          .join('')}`,
         hours(MISSING_KINDS.has(f.kind) ? p.minutes.total : f.minutes),
       ]),
     );
@@ -105,6 +143,7 @@ export function renderCsaWeekly(opts: {
       text.push(
         `- ${p.member.name} (${p.member.department}): ${FLAG_LABELS[f.kind]} — ${f.detail}`,
       );
+      for (const l of entryLines(f)) text.push(`    ${l}`);
     }
     text.push(
       '',

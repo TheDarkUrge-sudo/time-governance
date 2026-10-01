@@ -79,6 +79,8 @@ export interface Policy {
   fullTimeWeekHours: number;
   adHocWeeklyHours: number;
   adHocRecurringWeeks: number;
+  /** Minimum ad hoc hours in a week for it to count toward a streak. */
+  adHocRecurringMinHours: number;
   nonBillableMinDescriptionChars: number;
   internalOnlyRoleMarker: string;
   escalationLookbackWeeks: number;

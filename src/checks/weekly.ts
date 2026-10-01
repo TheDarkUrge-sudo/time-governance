@@ -39,10 +39,22 @@ export const FLAG_LABELS: Record<FlagKind, string> = {
 /** The "missing time" kinds — the ones Friday re-checks and escalates. */
 export const MISSING_KINDS: ReadonlySet<FlagKind> = new Set(['no_entry', 'minimal_entry']);
 
+/** One time entry behind a flag — what the CSA needs to follow up without opening Karbon. */
+export interface FlagEntry {
+  date: string;
+  client: string;
+  minutes: number;
+  taskType: string | null;
+  role: string | null;
+  description: string | null;
+}
+
 export interface Flag {
   kind: FlagKind;
   minutes: number;
   detail: string;
+  /** The entries behind an indicator flag (none for no entry / minimal entry). */
+  entries?: FlagEntry[];
 }
 
 export interface MinuteBreakdown {
@@ -183,6 +195,23 @@ export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
     else entriesByUser.set(e.userKey, [e]);
   }
   const clientName = (key: string) => input.clientNames.get(key) ?? 'a client';
+  const internalName = 'Internal HFA client';
+  const detailOf = (list: readonly TimeEntry[]): FlagEntry[] =>
+    [...list]
+      .sort((a, b) => a.date.localeCompare(b.date) || b.minutes - a.minutes)
+      .map((e) => ({
+        date: e.date,
+        client:
+          e.clientKey === null
+            ? '—'
+            : isInternal(e.clientKey)
+              ? internalName
+              : clientName(e.clientKey),
+        minutes: e.minutes,
+        taskType: e.taskTypeName,
+        role: e.roleName,
+        description: e.description?.trim() || null,
+      }));
   const isInternal = (key: string | null) => key !== null && input.internalClientKeys.has(key);
   const marker = policy.internalOnlyRoleMarker.toLowerCase();
 
@@ -234,6 +263,7 @@ export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
         kind: 'internal_client_billable',
         minutes: m,
         detail: `${hours(m)} h billable on the internal HFA client`,
+        entries: detailOf(internalBillable),
       });
     }
 
@@ -251,6 +281,7 @@ export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
         kind: 'internal_only_role',
         minutes: m,
         detail: `${policy.internalOnlyRoleMarker} role on ${listOf(clients)}`,
+        entries: detailOf(internalRole),
       });
     }
 
@@ -269,26 +300,37 @@ export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
         kind: 'nonbillable_unexplained',
         minutes: m,
         detail: `${n} non-billable ${n === 1 ? 'entry' : 'entries'} with no clear description`,
+        entries: detailOf(unexplained),
       });
     }
 
     // 4. Ad hoc work that is sizeable or keeps coming back — one flag per client.
     const adHocByClient = new Map<string, number>();
+    const adHocEntries = new Map<string, TimeEntry[]>();
     for (const e of entries) {
       if (e.workItemKey === null || !input.adHocWorkItemKeys.has(e.workItemKey)) continue;
       // The internal client's time is administrative, not client work to reassign.
       if (e.clientKey === null || isInternal(e.clientKey)) continue;
       adHocByClient.set(e.clientKey, (adHocByClient.get(e.clientKey) ?? 0) + e.minutes);
+      adHocEntries.set(e.clientKey, [...(adHocEntries.get(e.clientKey) ?? []), e]);
     }
     for (const [clientKey, m] of [...adHocByClient].sort((a, b) => b[1] - a[1])) {
       adHocUsage.push({ userKey: user.id, email: member.email, clientKey, minutes: m });
+      // A week counts toward a streak only with at least the minimum on it,
+      // so 15 minutes a week on the same client is not a pattern.
+      const countsThisWeek = m >= policy.adHocRecurringMinHours * 60;
       const weeksRunning = input.priorAdHocStreak(user.id, clientKey) + 1;
       const sizeable = m > policy.adHocWeeklyHours * 60;
-      const recurring = weeksRunning >= policy.adHocRecurringWeeks;
+      const recurring = countsThisWeek && weeksRunning >= policy.adHocRecurringWeeks;
       if (!sizeable && !recurring) continue;
       const parts = [`${hours(m)} h on ${clientName(clientKey)}'s Ad Hoc work item`];
       if (recurring) parts.push(`${weeksRunning} weeks running`);
-      flags.push({ kind: 'ad_hoc_work', minutes: m, detail: parts.join(', ') });
+      flags.push({
+        kind: 'ad_hoc_work',
+        minutes: m,
+        detail: parts.join(', '),
+        entries: detailOf(adHocEntries.get(clientKey) ?? []),
+      });
     }
 
     for (const e of entries) {

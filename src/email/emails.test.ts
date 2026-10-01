@@ -90,6 +90,42 @@ describe('emails', () => {
     expect(tiny.text).toContain('Quinn Foster is just under target.');
   });
 
+  it('lists the entries behind a flag, up to five, then "+N more"', () => {
+    const entries = Array.from({ length: 7 }, (_, i) => ({
+      date: '2026-09-22',
+      client: 'Acme Corp',
+      minutes: 60 + i,
+      taskType: 'Admin',
+      role: 'Staff',
+      description: i === 0 ? null : 'call',
+    }));
+    const email = renderCsaWeekly({
+      week,
+      csaName: null,
+      unmatched: [],
+      people: [
+        {
+          member: member({ name: 'Sam Nguyen' }),
+          karbonUserId: 'k',
+          minutes: {
+            total: 2400,
+            billable: 2000,
+            nonBillable: 400,
+            pto: 0,
+            sick: 0,
+            unclassified: 0,
+          },
+          minimalThresholdMinutes: 1200,
+          flags: [{ kind: 'nonbillable_unexplained', minutes: 427, detail: '7 entries', entries }],
+        },
+      ],
+    });
+    expect(email.text).toContain('    Tue Sep 22 · Acme Corp · 1.0 h · Admin · (no description)');
+    expect(email.text).toContain('    Tue Sep 22 · Acme Corp · 1.0 h · Admin · “call”');
+    expect(email.text).toContain('    +2 more entries');
+    expect(email.bodyHtml).toContain('Tue Sep 22 · Acme Corp · 1.0 h · Admin · “call”');
+  });
+
   it('says so plainly when there is nothing to flag', () => {
     const email = renderCsaWeekly({ week, csaName: 'Casey', unmatched: [], people: [] });
     expect(email.subject).toBe('Weekly time entry review: week of Sep 21 — no flags');

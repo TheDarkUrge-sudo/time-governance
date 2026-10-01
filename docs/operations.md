@@ -74,7 +74,7 @@ run at once. `pnpm tg karbon:check` isolates which call fails.
 
 Thresholds are environment settings — change the secret and redeploy:
 `MINIMAL_WEEK_HOURS`, `FULL_TIME_WEEK_HOURS`, `AD_HOC_WEEKLY_HOURS`,
-`AD_HOC_RECURRING_WEEKS`, `NONBILLABLE_MIN_DESCRIPTION_CHARS`,
+`AD_HOC_RECURRING_WEEKS`, `AD_HOC_RECURRING_MIN_HOURS`, `NONBILLABLE_MIN_DESCRIPTION_CHARS`,
 `INTERNAL_ONLY_ROLE_MARKER`, `ESCALATION_LOOKBACK_WEEKS`,
 `HISTORY_RETENTION_DAYS`. Schedules (Tue/Fri 9:00, week-2 Monday 9:00) are
 in `src/worker.ts`.

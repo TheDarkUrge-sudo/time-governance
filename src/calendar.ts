@@ -113,6 +113,13 @@ const LONG_MONTHS = [
   'December',
 ];
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "Tue Sep 22" */
+export function dayLabel(iso: string): string {
+  return `${WEEKDAYS[weekday(iso)]} ${shortDate(iso)}`;
+}
+
 /** "Sep 21" */
 export function shortDate(iso: string): string {
   return `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`;

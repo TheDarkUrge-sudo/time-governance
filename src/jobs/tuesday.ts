@@ -22,7 +22,11 @@ export async function runTuesday(deps: JobDeps, week: DateRange): Promise<JobRes
       deps.karbon.listAdHocWorkItems(deps.adHocTitle),
     ]);
     const streaks = deps.store
-      ? await deps.store.adHocStreaks(week.start, deps.policy.adHocRecurringWeeks)
+      ? await deps.store.adHocStreaks(
+          week.start,
+          deps.policy.adHocRecurringWeeks,
+          deps.policy.adHocRecurringMinHours * 60,
+        )
       : () => 0;
 
     const review = runWeeklyChecks({

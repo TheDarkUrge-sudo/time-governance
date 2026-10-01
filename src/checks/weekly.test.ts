@@ -150,6 +150,16 @@ describe('weekly checks', () => {
         kind: 'internal_client_billable',
         minutes: 120,
         detail: '2.0 h billable on the internal HFA client',
+        entries: [
+          {
+            date: MON,
+            client: 'Internal HFA client',
+            minutes: 120,
+            taskType: 'Audit Fieldwork',
+            role: 'Staff',
+            description: 'Testing controls for year-end',
+          },
+        ],
       },
     ]);
   });
@@ -169,7 +179,12 @@ describe('weekly checks', () => {
     ];
     const review = runWeeklyChecks(input({ roster: roster([alvarez]), users: [u1], entries }));
     expect(review.people[0]!.flags).toEqual([
-      { kind: 'internal_only_role', minutes: 90, detail: '(Internal Only) role on Acme Corp' },
+      {
+        kind: 'internal_only_role',
+        minutes: 90,
+        detail: '(Internal Only) role on Acme Corp',
+        entries: [expect.objectContaining({ client: 'Acme Corp', role: 'Admin (internal only)' })],
+      },
     ]);
   });
 
@@ -192,6 +207,10 @@ describe('weekly checks', () => {
         kind: 'nonbillable_unexplained',
         minutes: 90,
         detail: '2 non-billable entries with no clear description',
+        entries: [
+          expect.objectContaining({ minutes: 60, description: null }),
+          expect.objectContaining({ minutes: 30, description: 'call' }),
+        ],
       },
     ]);
   });
@@ -218,17 +237,42 @@ describe('weekly checks', () => {
       }),
     );
     expect(review.people[0]!.flags).toEqual([
-      { kind: 'ad_hoc_work', minutes: 300, detail: "5.0 h on Acme Corp's Ad Hoc work item" },
+      {
+        kind: 'ad_hoc_work',
+        minutes: 300,
+        detail: "5.0 h on Acme Corp's Ad Hoc work item",
+        entries: [expect.objectContaining({ date: MON, client: 'Acme Corp', minutes: 300 })],
+      },
       {
         kind: 'ad_hoc_work',
         minutes: 60,
         detail: "1.0 h on Beta LLC's Ad Hoc work item, 3 weeks running",
+        entries: [expect.objectContaining({ date: TUE, client: 'Beta LLC', minutes: 60 })],
       },
     ]);
     expect(review.adHocUsage).toEqual([
       { userKey: u1.id, email: alvarez.email, clientKey: 'C-ACME', minutes: 300 },
       { userKey: u1.id, email: alvarez.email, clientKey: 'C-BETA', minutes: 60 },
     ]);
+  });
+
+  it('a week under the 1-hour minimum does not count toward an ad hoc streak', () => {
+    const entries = [
+      ...fullWeek(u1.id),
+      entry({
+        userKey: u1.id,
+        date: TUE,
+        minutes: 45,
+        workItemKey: 'W-ADHOC-BETA',
+        clientKey: 'C-BETA',
+      }),
+    ];
+    const review = runWeeklyChecks(
+      input({ roster: roster([alvarez]), users: [u1], entries, priorAdHocStreak: () => 5 }),
+    );
+    expect(review.people[0]!.flags).toEqual([]);
+    // Still recorded, so the history is complete; the store applies the minimum when reading it back.
+    expect(review.adHocUsage).toHaveLength(1);
   });
 
   it('ignores ad hoc time on the internal client', () => {

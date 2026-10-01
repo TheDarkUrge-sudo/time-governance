@@ -288,6 +288,18 @@ describe('jobs (PGlite + fake Karbon + fake SendGrid)', () => {
     expect(txt).toContain('Jordan Alvarez (Audit): No entry');
   });
 
+  it('ad hoc streaks skip weeks under the minimum', async () => {
+    const usage = (minutes: number) => [
+      { userKey: 'k1', email: 'a@x.com', clientKey: 'C1', minutes },
+    ];
+    await store.saveAdHocUsage('2026-09-07', usage(120));
+    await store.saveAdHocUsage('2026-09-14', usage(30)); // under 1 h: breaks the streak
+    const streak = await store.adHocStreaks('2026-09-21', 3, 60);
+    expect(streak('k1', 'C1')).toBe(0);
+    await store.saveAdHocUsage('2026-09-14', usage(60));
+    expect((await store.adHocStreaks('2026-09-21', 3, 60))('k1', 'C1')).toBe(2);
+  });
+
   it('purges history older than the retention window on each Tuesday run', async () => {
     await store.saveEscalations('2025-01-06', [{ email: alvarez.email, kind: 'no_entry' }]);
     await store.saveEscalations('2026-09-07', [{ email: alvarez.email, kind: 'no_entry' }]);

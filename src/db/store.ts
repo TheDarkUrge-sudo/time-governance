@@ -183,6 +183,7 @@ export class Store {
   async adHocStreaks(
     weekStart: string,
     maxWeeks: number,
+    minMinutes = 0,
   ): Promise<(userKey: string, clientKey: string) => number> {
     const from = addDays(weekStart, -7 * maxWeeks);
     const rows = await this.db
@@ -192,7 +193,13 @@ export class Store {
         client: adHocUsage.clientKey,
       })
       .from(adHocUsage)
-      .where(and(gte(adHocUsage.weekStart, from), lt(adHocUsage.weekStart, weekStart)));
+      .where(
+        and(
+          gte(adHocUsage.weekStart, from),
+          lt(adHocUsage.weekStart, weekStart),
+          gte(adHocUsage.minutes, minMinutes),
+        ),
+      );
     const weeks = new Map<string, Set<string>>();
     for (const r of rows) {
       const k = `${r.user}|${r.client}`;

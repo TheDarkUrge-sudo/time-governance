@@ -61,6 +61,8 @@ const schema = z.object({
   FULL_TIME_WEEK_HOURS: number(40),
   AD_HOC_WEEKLY_HOURS: number(4),
   AD_HOC_RECURRING_WEEKS: number(3),
+  /** A week only counts toward an ad hoc streak with at least this much time on it. */
+  AD_HOC_RECURRING_MIN_HOURS: number(1),
   NONBILLABLE_MIN_DESCRIPTION_CHARS: number(10),
   INTERNAL_ONLY_ROLE_MARKER: z.preprocess(blankToUndefined, z.string().default('(Internal Only)')),
   ESCALATION_LOOKBACK_WEEKS: number(4),
