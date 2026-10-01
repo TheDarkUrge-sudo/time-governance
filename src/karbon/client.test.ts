@@ -11,7 +11,7 @@ function fake(handler: (path: string) => unknown) {
   const calls: string[] = [];
   const transport: KarbonTransport = (path) => {
     calls.push(decodeURIComponent(path));
-    return Promise.resolve().then(() => handler(path));
+    return Promise.resolve().then(() => handler(decodeURIComponent(path)));
   };
   return { transport, calls, sleep: () => Promise.resolve() };
 }
@@ -135,6 +135,33 @@ describe('KarbonClient', () => {
     expect(n).toBe(1);
     const bad = new KarbonClient(fake(() => ({ items: [] })));
     await expect(bad.listUsers()).rejects.toBeInstanceOf(KarbonUnavailableError);
+  });
+
+  it('finds the internal client by its client ID, trying each client type', async () => {
+    const f = fake((path) => {
+      if (path.includes('Organizations')) return Promise.reject(new KarbonApiError('404', 404));
+      if (path.includes('Contacts'))
+        return { ContactKey: 'K-99', FirstName: 'HFA', LastName: 'Internal' };
+      throw new Error('should not reach client groups');
+    });
+    const found = await new KarbonClient(f).findClientByUserDefinedId('99999');
+    expect(found).toEqual({ clientKey: 'K-99', name: 'HFA Internal', type: 'Contact' });
+    expect(f.calls[0]).toBe(
+      "/v3/Organizations/GetOrganizationByUserDefinedIdentifier(UserDefinedIdentifier='99999')",
+    );
+
+    const org = fake(() => ({
+      OrganizationKey: 'K-ORG',
+      FullName: 'Holman Frenia Allison (internal)',
+    }));
+    expect(await new KarbonClient(org).findClientByUserDefinedId('99999')).toEqual({
+      clientKey: 'K-ORG',
+      name: 'Holman Frenia Allison (internal)',
+      type: 'Organization',
+    });
+
+    const none = fake(() => Promise.reject(new KarbonApiError('404', 404)));
+    expect(await new KarbonClient(none).findClientByUserDefinedId('99999')).toBeNull();
   });
 
   it('stops if Karbon ignores $skip', async () => {

@@ -32,7 +32,13 @@ const schema = z.object({
 
   KARBON_API_KEY: optionalString,
   KARBON_API_SECRET: optionalString,
-  /** The internal HFA client(s) in Karbon — check 1 and check 2 key off these. */
+  /**
+   * The internal HFA client, by its Karbon client ID (the firm's is 99999) —
+   * resolved to Karbon's internal key at run time. Checks 1–4 key off it.
+   * Unset = 99999; set to blank to disable.
+   */
+  KARBON_INTERNAL_CLIENT_IDS: z.preprocess((v) => (v === undefined ? '99999' : v), csv),
+  /** Optional: internal client(s) by Karbon key directly, if the ID lookup can't be used. */
   KARBON_INTERNAL_CLIENT_KEYS: csv,
   /** Every client has an ad hoc work item; this is the title text that finds them. */
   KARBON_AD_HOC_TITLE: z.preprocess(blankToUndefined, z.string().default('Ad Hoc')),

@@ -79,12 +79,7 @@ export async function runTuesday(deps: JobDeps, week: DateRange): Promise<JobRes
     const sections = [
       {
         title: 'Setup',
-        lines:
-          deps.internalClientKeys.size === 0
-            ? [
-                'KARBON_INTERNAL_CLIENT_KEYS is not set: check 1 (billable time on the internal client) cannot run, and check 2 treats the internal client like a real one. Find the key with `pnpm tg karbon:clients HFA`.',
-              ]
-            : [],
+        lines: deps.setupNotes,
       },
       {
         title: 'Flags no CSA received (no CSA Assigned, or nobody on the Recipients tab for it)',

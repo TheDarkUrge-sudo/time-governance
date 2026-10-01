@@ -15,14 +15,14 @@ with one command; everything else runs on schedule.
 
 ## The checks
 
-| Check                               | Flags when                                                                                                        |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| No time logged                      | 0 hours for the week                                                                                              |
-| Minimal entry                       | Worked hours under **20 h** (full-time), scaled for part-timers and reduced for firm holidays and PTO/sick logged |
-| 1. Internal client billability      | Any billable time on the internal HFA client                                                                      |
-| 2. Internal-only roles              | A role containing "(Internal Only)" used on a real client                                                         |
-| 3. Non-billable time on client work | Non-billable client time with a blank or very short (< 10 characters) description                                 |
-| 4. Ad hoc work                      | Over **4 h** on one client's Ad Hoc work item in a week, or the same client **3 weeks running**                   |
+| Check                                     | Flags when                                                                                                        |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| No time logged                            | 0 hours for the week                                                                                              |
+| Minimal entry                             | Worked hours under **20 h** (full-time), scaled for part-timers and reduced for firm holidays and PTO/sick logged |
+| 1. Internal client billability            | Any billable time on the internal HFA client (client ID **99999**)                                                |
+| 2. Internal-only roles                    | A role containing "(Internal Only)" used on a real client                                                         |
+| 3. Non-billable time on client work       | Non-billable client time with a blank or very short (< 10 characters) description                                 |
+| 4. Ad hoc work (internal client excluded) | Over **4 h** on one client's Ad Hoc work item in a week, or the same client **3 weeks running**                   |
 
 **Billable, non-billable, PTO and sick come from the roster workbook's Task
 Types tab.** Karbon keeps billability on each task type, but its API gives
@@ -46,8 +46,8 @@ All thresholds are environment settings (see `.env.example`).
 3. `pnpm install` then `pnpm db:migrate`.
 4. `pnpm tg karbon:check` — confirms the credentials can read users, time
    entries, capacity and the Ad Hoc work items.
-5. `pnpm tg karbon:clients HFA` — find the internal client's key; set
-   `KARBON_INTERNAL_CLIENT_KEYS`.
+5. The internal client is found by its client ID, **99999** by default
+   (`KARBON_INTERNAL_CLIENT_IDS`). `karbon:check` shows what it resolved to.
 6. **Fill in the roster workbook** — start from
    `templates/HFA_Staff_Roster_Template.xlsx`. `pnpm tg karbon:task-types`
    lists every task type used in the last 90 days, for the Task Types tab.

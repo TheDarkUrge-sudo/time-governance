@@ -306,6 +306,7 @@ const deps: JobDeps = {
   internalClientKeys: new Set([HFA]),
   adHocTitle: 'Ad Hoc',
   retentionDays: 400,
+  setupNotes: [],
 };
 
 const weeks = ['2026-09-07', '2026-09-14', '2026-09-21'];

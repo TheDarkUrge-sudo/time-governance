@@ -39,6 +39,7 @@ import { runFriday } from './jobs/friday';
 import { runMonthly } from './jobs/monthly';
 import { runTuesday } from './jobs/tuesday';
 import { KarbonClient, karbonConfigured } from './karbon/client';
+import { resolveInternalClients } from './karbon/internal-client';
 import { describeDiff, diffRoster } from './roster/diff';
 import { parseRosterWorkbook } from './roster/workbook';
 import { liveRuntime } from './runtime';
@@ -88,7 +89,7 @@ async function status(): Promise<number> {
     `Karbon:     ${karbonConfigured() ? 'configured' : 'NOT configured'}`,
     `SendGrid:   ${emailConfigured() ? 'configured' : 'NOT configured'}`,
     `Admin to:   ${env.TG_ADMIN_TO.join(', ') || '(none)'}`,
-    `Internal client keys: ${env.KARBON_INTERNAL_CLIENT_KEYS.join(', ') || 'NOT SET (check 1 and 2 cannot run)'}`,
+    `Internal client: ID ${env.KARBON_INTERNAL_CLIENT_IDS.join(', ') || '(none)'}${env.KARBON_INTERNAL_CLIENT_KEYS.length ? ` + keys ${env.KARBON_INTERNAL_CLIENT_KEYS.join(', ')}` : ''}`,
     `Timezone:   ${env.FIRM_TIMEZONE} (today ${today})`,
   );
   if (!env.DATABASE_URL) {
@@ -218,12 +219,18 @@ async function karbonCheck(): Promise<number> {
     karbon.listAdHocWorkItems(env.KARBON_AD_HOC_TITLE),
   ]);
   const clients = new Set(entries.map((e) => e.clientKey).filter(Boolean));
-  const internal = env.KARBON_INTERNAL_CLIENT_KEYS.filter((k) => clients.has(k));
+  const internal = await resolveInternalClients(
+    karbon,
+    env.KARBON_INTERNAL_CLIENT_IDS,
+    env.KARBON_INTERNAL_CLIENT_KEYS,
+  );
+  const seen = [...internal.keys].filter((k) => clients.has(k));
   say(
     `Users:                ${users.length}`,
     `Time entries, 7 days: ${entries.length} (${new Set(entries.map((e) => e.userKey)).size} people)`,
     `"${env.KARBON_AD_HOC_TITLE}" work items: ${adHoc.length} across ${new Set(adHoc.map((w) => w.clientKey)).size} clients`,
-    `Internal client keys: ${env.KARBON_INTERNAL_CLIENT_KEYS.length === 0 ? 'NOT SET' : `${env.KARBON_INTERNAL_CLIENT_KEYS.join(', ')} (${internal.length} seen in the last 7 days)`}`,
+    `Internal client:      ${internal.resolved.join('; ') || 'NOT FOUND'}${internal.keys.size ? ` — time logged to it in the last 7 days: ${seen.length > 0 ? 'yes' : 'none'}` : ''}`,
+    ...internal.notes.map((n) => `  ! ${n}`),
   );
   if (users.length > 0) {
     const capacity = await karbon.getUserCapacityMinutes(users[0]!.id);

@@ -125,6 +125,37 @@ const rawWorkItem = z.object({
   ClientName: z.string().nullish(),
 });
 
+export interface KarbonClientRef {
+  clientKey: string;
+  name: string | null;
+  type: 'Organization' | 'Contact' | 'ClientGroup';
+}
+
+const LOOKUPS = [
+  {
+    type: 'Organization',
+    path: 'Organizations/GetOrganizationByUserDefinedIdentifier',
+    schema: z.object({ OrganizationKey: z.string().min(1), FullName: z.string().nullish() }),
+    key: (r: Record<string, unknown>) => r.OrganizationKey as string,
+  },
+  {
+    type: 'Contact',
+    path: 'Contacts/GetContactByUserDefinedIdentifier',
+    schema: z.object({
+      ContactKey: z.string().min(1),
+      FirstName: z.string().nullish(),
+      LastName: z.string().nullish(),
+    }),
+    key: (r: Record<string, unknown>) => r.ContactKey as string,
+  },
+  {
+    type: 'ClientGroup',
+    path: 'ClientGroups/GetClientGroupByUserDefinedIdentifier',
+    schema: z.object({ ClientGroupKey: z.string().min(1), FullName: z.string().nullish() }),
+    key: (r: Record<string, unknown>) => r.ClientGroupKey as string,
+  },
+] as const;
+
 export interface AdHocWorkItem {
   workItemKey: string;
   clientKey: string;
@@ -250,6 +281,37 @@ export class KarbonClient {
       });
     }
     return out;
+  }
+
+  /**
+   * A client by the firm's own client ID (Karbon's UserDefinedIdentifier, e.g.
+   * "99999" for the internal HFA client). Tries organizations, then contacts,
+   * then client groups; null if none has that ID.
+   */
+  async findClientByUserDefinedId(id: string): Promise<KarbonClientRef | null> {
+    const literal = encodeURIComponent(odataString(id));
+    for (const lookup of LOOKUPS) {
+      let payload: unknown;
+      try {
+        payload = await this.get(`/v3/${lookup.path}(UserDefinedIdentifier=${literal})`);
+      } catch (err) {
+        if (err instanceof KarbonApiError && err.status === 404) continue;
+        throw err;
+      }
+      const parsed = lookup.schema.safeParse(payload);
+      if (!parsed.success) {
+        throw new KarbonUnavailableError(
+          `Karbon ${lookup.type} lookup did not match the expected shape`,
+        );
+      }
+      const r = parsed.data as Record<string, unknown>;
+      const name =
+        'FullName' in r
+          ? ((r.FullName as string | null | undefined) ?? null)
+          : [r.FirstName, r.LastName].filter(Boolean).join(' ') || null;
+      return { clientKey: lookup.key(r), name, type: lookup.type };
+    }
+    return null;
   }
 
   /**

@@ -276,7 +276,8 @@ export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
     const adHocByClient = new Map<string, number>();
     for (const e of entries) {
       if (e.workItemKey === null || !input.adHocWorkItemKeys.has(e.workItemKey)) continue;
-      if (e.clientKey === null) continue;
+      // The internal client's time is administrative, not client work to reassign.
+      if (e.clientKey === null || isInternal(e.clientKey)) continue;
       adHocByClient.set(e.clientKey, (adHocByClient.get(e.clientKey) ?? 0) + e.minutes);
     }
     for (const [clientKey, m] of [...adHocByClient].sort((a, b) => b[1] - a[1])) {

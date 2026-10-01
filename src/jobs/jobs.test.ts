@@ -149,6 +149,7 @@ describe('jobs (PGlite + fake Karbon + fake SendGrid)', () => {
       internalClientKeys: new Set(['C-HFA']),
       adHocTitle: 'Ad Hoc',
       retentionDays: 400,
+      setupNotes: [],
       ...over,
     };
   }

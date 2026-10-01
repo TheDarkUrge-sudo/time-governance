@@ -6,6 +6,7 @@ import { emailConfigured, sendgridTransport } from './email/sendgrid';
 import { env } from './env';
 import type { JobDeps } from './jobs/context';
 import { KarbonClient } from './karbon/client';
+import { resolveInternalClients } from './karbon/internal-client';
 import { policyFromEnv } from './policy';
 
 export interface Runtime {
@@ -37,6 +38,11 @@ export async function liveRuntime(opts: {
       `TG_MODE is "${env.TG_MODE}" but email is not configured (SENDGRID_API_KEY, SENDGRID_FROM_EMAIL).`,
     );
   }
+  const internal = await resolveInternalClients(
+    karbon,
+    env.KARBON_INTERNAL_CLIENT_IDS,
+    env.KARBON_INTERNAL_CLIENT_KEYS,
+  );
   return {
     deps: {
       karbon,
@@ -52,9 +58,10 @@ export async function liveRuntime(opts: {
         outDir: opts.outDir,
       },
       adminTo: env.TG_ADMIN_TO,
-      internalClientKeys: new Set(env.KARBON_INTERNAL_CLIENT_KEYS),
+      internalClientKeys: internal.keys,
       adHocTitle: env.KARBON_AD_HOC_TITLE,
       retentionDays: env.HISTORY_RETENTION_DAYS,
+      setupNotes: internal.notes,
     },
     close,
   };

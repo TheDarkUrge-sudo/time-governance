@@ -17,6 +17,8 @@ export interface JobDeps {
   adHocTitle: string;
   /** Weekly history older than this many days is purged after each Tuesday run. */
   retentionDays: number;
+  /** Setup problems found while preparing the run, reported in the Tuesday admin summary. */
+  setupNotes: string[];
 }
 
 export interface JobResult {

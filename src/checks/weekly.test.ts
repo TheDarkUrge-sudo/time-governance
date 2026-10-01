@@ -231,6 +231,30 @@ describe('weekly checks', () => {
     ]);
   });
 
+  it('ignores ad hoc time on the internal client', () => {
+    const entries = [
+      ...fullWeek(u1.id),
+      entry({
+        userKey: u1.id,
+        date: MON,
+        minutes: 600,
+        workItemKey: 'W-ADHOC-HFA',
+        clientKey: 'C-HFA',
+        taskTypeName: 'Admin',
+      }),
+    ];
+    const review = runWeeklyChecks(
+      input({
+        roster: roster([alvarez]),
+        users: [u1],
+        entries,
+        adHocWorkItemKeys: new Set(['W-ADHOC-HFA']),
+      }),
+    );
+    expect(review.people[0]!.flags).toEqual([]);
+    expect(review.adHocUsage).toEqual([]);
+  });
+
   it('ad hoc time under the line and not recurring is recorded but not flagged', () => {
     const entries = [
       ...fullWeek(u1.id),
