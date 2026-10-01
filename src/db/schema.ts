@@ -72,6 +72,10 @@ export const weeklyResults = pgTable(
     weekStart: date('week_start', { mode: 'string' }).notNull(),
     phase: text('phase', { enum: ['tuesday', 'friday'] }).notNull(),
     email: text('email').notNull(),
+    /** Snapshotted each week so history stays readable after someone leaves the roster. */
+    name: text('name'),
+    department: text('department'),
+    managerName: text('manager_name'),
     karbonUserId: text('karbon_user_id').notNull(),
     flags: jsonb('flags').$type<{ kind: string; minutes: number; detail: string }[]>().notNull(),
     minutes: jsonb('minutes').$type<Record<string, number>>().notNull(),
