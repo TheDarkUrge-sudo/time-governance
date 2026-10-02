@@ -73,6 +73,11 @@ export function sendgridTransport(): EmailTransport {
         `SendGrid request did not complete (${err instanceof Error ? err.name : 'network error'})`,
       );
     }
+    // A 5xx (often a gateway) can follow an accepted send, so it is not proof
+    // nothing went out — treat it as in doubt rather than safe to re-send.
+    if (res.status >= 500) {
+      throw new EmailSendUncertainError(`SendGrid responded HTTP ${res.status}`);
+    }
     if (!res.ok)
       throw new EmailSendError(`SendGrid rejected the email (HTTP ${res.status})`, res.status);
     return { messageId: res.headers.get('x-message-id') ?? 'unknown' };

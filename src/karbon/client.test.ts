@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   KarbonApiError,
@@ -6,6 +6,7 @@ import {
   type KarbonTransport,
   KarbonUnavailableError,
   KarbonWriteUncertainError,
+  liveTransport,
 } from './client';
 
 function fake(handler: (path: string) => unknown) {
@@ -18,6 +19,28 @@ function fake(handler: (path: string) => unknown) {
 }
 
 describe('KarbonClient', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('backs off on a 429 without Retry-After (a missing header is not "wait 0")', async () => {
+    const responses = [
+      new Response('{}', { status: 429 }),
+      new Response('{}', { status: 429, headers: { 'Retry-After': '7' } }),
+      new Response(JSON.stringify({ value: [] }), { status: 200 }),
+    ];
+    vi.stubGlobal('fetch', () => Promise.resolve(responses.shift()!));
+    const waits: number[] = [];
+    const client = new KarbonClient({
+      transport: liveTransport('bearer', 'access'),
+      sleep: (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+      },
+    });
+    await client.listUsers();
+    expect(waits[0]).toBeGreaterThan(0); // exponential backoff
+    expect(waits[1]).toBe(7000); // the header, when Karbon sends one
+  });
+
   it('pages users by 100 and drops duplicates', async () => {
     const all = Array.from({ length: 150 }, (_, i) => ({
       Id: `u${i}`,

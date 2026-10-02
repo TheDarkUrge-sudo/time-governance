@@ -4,7 +4,7 @@ HFA Time Governance — a standalone worker that runs the firm's Time
 Governance SOP from Karbon's API and emails CSAs (Tuesday), Partners (Friday)
 and Managers (monthly). Read `README.md`, then `docs/decisions.md` before
 changing a rule, and `docs/operations.md` before changing anything an
-operator relies on. Update those docs in the same commit as the change.
+operator relies on. `docs/go-live.md` is the ordered go-live checklist. Update those docs in the same commit as the change.
 
 ## Commands
 

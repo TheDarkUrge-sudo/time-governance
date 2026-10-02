@@ -90,8 +90,10 @@ export function csaDraft(opts: {
         `I don't see your time for the week of ${weekLabel} in Karbon. Can you enter it by Thursday?`,
       );
     } else if (f.kind === 'minimal_entry') {
+      // f.minutes is worked time — what the flag measured; PTO and sick are on top.
+      const leave = person.minutes.pto + person.minutes.sick;
       asks.push(
-        `I only see ${hours(person.minutes.total)} hours for the week of ${weekLabel} in Karbon. Can you enter the rest by Thursday?`,
+        `I only see ${hours(f.minutes)} hours of work for the week of ${weekLabel} in Karbon${leave > 0 ? ` (plus ${hours(leave)} hours of PTO/sick)` : ''}. Can you enter the rest by Thursday?`,
       );
     }
   }
@@ -211,7 +213,8 @@ export function renderCsaWeekly(opts: {
               `<div style="color:#888888;font-size:11px;margin-top:2px;padding-left:8px;border-left:2px solid #E5E5E5;">${escapeHtml(l)}</div>`,
           )
           .join('')}`,
-        hours(MISSING_KINDS.has(f.kind) ? p.minutes.total : f.minutes),
+        // The minutes the flag measured: worked time for missing/minimal, the flagged time otherwise.
+        hours(f.minutes),
       ]),
     );
     html += paragraph(

@@ -79,26 +79,35 @@ export async function deliver(ctx: DeliveryContext, d: Delivery): Promise<Delive
     ? `Shadow mode — in live mode this email goes to: ${d.to.join(', ')}. Any Email buttons open drafts to the real people; nothing goes out unless you press Send.`
     : undefined;
 
-  const claim = await ctx.store.claimSend({
+  const key = {
     kind: d.kind,
     period: d.period,
     recipient: d.recipientKey,
-    mode: shadow ? 'shadow' : 'live',
-    deliveredTo: deliveredTo.join(', '),
-    subject,
-  });
-  if (claim === null) return { ...base, deliveredTo, outcome: 'already_sent' };
+    mode: shadow ? ('shadow' as const) : ('live' as const),
+  };
+  const claim = await ctx.store.claimSend({ ...key, deliveredTo: deliveredTo.join(', '), subject });
+  if (claim === null) {
+    // A claim still 'sending' is an earlier attempt that never finished — not a sent email.
+    return (await ctx.store.sendClaimStatus(key)) === 'sending'
+      ? {
+          ...base,
+          deliveredTo,
+          outcome: 'in_doubt',
+          error:
+            "an earlier attempt was interrupted — check SendGrid's activity; if it did not go out, delete its email_sends row (status sending) and re-run",
+        }
+      : { ...base, deliveredTo, outcome: 'already_sent' };
+  }
 
+  let messageId: string;
   try {
     const text = notice ? `${notice}\n\n${d.content.text}` : d.content.text;
-    const { messageId } = await ctx.transport({
+    ({ messageId } = await ctx.transport({
       to: deliveredTo,
       subject,
       html: wrapEmail(d.content.bodyHtml, notice),
       text,
-    });
-    await ctx.store.markSent(claim, messageId);
-    return { ...base, deliveredTo, outcome: 'sent' };
+    }));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (err instanceof EmailSendUncertainError) {
@@ -114,6 +123,21 @@ export async function deliver(ctx: DeliveryContext, d: Delivery): Promise<Delive
       error: err instanceof EmailSendError ? message : `unexpected: ${message}`,
     };
   }
+  // SendGrid has accepted it. Recording that is bookkeeping: if the write fails,
+  // keep the claim (releasing it would let a re-run send the email twice).
+  try {
+    await ctx.store.markSent(claim, messageId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ kind: d.kind, to: deliveredTo, err: message }, 'sent but not recorded');
+    return {
+      ...base,
+      deliveredTo,
+      outcome: 'sent',
+      error: `sent, but recording it failed: ${message}`,
+    };
+  }
+  return { ...base, deliveredTo, outcome: 'sent' };
 }
 
 async function writePreview(outDir: string, d: Delivery): Promise<void> {

@@ -55,10 +55,18 @@ export function mailtoHref(d: Draft): string {
     return `mailto:${encodeAddresses(d.to)}?${params.join('&')}`;
   };
   const all = d.details ?? [];
+  // Entry lines start "- "; headings and blank lines only frame them, so they
+  // aren't counted in "+N more" (when there are no "- " lines, every line counts).
+  const isItem = all.some((l) => l.startsWith('- '))
+    ? (l: string) => l.startsWith('- ')
+    : (l: string) => l.trim() !== '';
   let href = build(draftBody(d));
   for (let keep = all.length - 1; href.length > MAX_MAILTO_LENGTH && keep >= 0; keep--) {
-    const more = all.length - keep;
-    href = build(draftBody(d, [...all.slice(0, keep), `(+${more} more — see Karbon)`]));
+    const kept = all.slice(0, keep);
+    // Never end on a heading or blank line left with none of its entries.
+    while (kept.length > 0 && !isItem(kept[kept.length - 1]!)) kept.pop();
+    const more = all.slice(kept.length).filter(isItem).length;
+    href = build(draftBody(d, [...kept, `(+${more} more — see Karbon)`]));
   }
   return href;
 }
