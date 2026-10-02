@@ -5,6 +5,7 @@ import {
   KarbonClient,
   type KarbonTransport,
   KarbonUnavailableError,
+  KarbonWriteUncertainError,
 } from './client';
 
 function fake(handler: (path: string) => unknown) {
@@ -145,7 +146,13 @@ describe('KarbonClient', () => {
       throw new Error('should not reach client groups');
     });
     const found = await new KarbonClient(f).findClientByUserDefinedId('99999');
-    expect(found).toEqual({ clientKey: 'K-99', name: 'HFA Internal', type: 'Contact' });
+    expect(found).toEqual({
+      clientKey: 'K-99',
+      name: 'HFA Internal',
+      type: 'Contact',
+      restrictionLevel: null,
+      clientType: null,
+    });
     expect(f.calls[0]).toBe(
       "/v3/Organizations/GetOrganizationByUserDefinedIdentifier(UserDefinedIdentifier='99999')",
     );
@@ -158,6 +165,8 @@ describe('KarbonClient', () => {
       clientKey: 'K-ORG',
       name: 'Holman Frenia Allison (internal)',
       type: 'Organization',
+      restrictionLevel: null,
+      clientType: null,
     });
 
     const none = fake(() => Promise.reject(new KarbonApiError('404', 404)));
@@ -170,5 +179,85 @@ describe('KarbonClient', () => {
     const users = await new KarbonClient(f).listUsers();
     expect(users).toHaveLength(100);
     expect(f.calls).toHaveLength(2);
+  });
+
+  it('posts a note with assignee, due date and timeline, and reads comments back', async () => {
+    const bodies: unknown[] = [];
+    const client = new KarbonClient({
+      sleep: () => Promise.resolve(),
+      transport: (path, init) => {
+        if (init) {
+          bodies.push(init.body);
+          return Promise.resolve({ Id: 'N1' });
+        }
+        expect(path).toBe('/v3/Notes/N1');
+        return Promise.resolve({
+          Id: 'N1',
+          Comments: [
+            {
+              CommentBody: 'second',
+              CreatedDate: '2026-09-24T10:00:00Z',
+              AuthorEmailAddress: 'c@x.com',
+            },
+            { CommentBody: '  ', CreatedDate: '2026-09-23T10:00:00Z' },
+            {
+              CommentBody: 'first',
+              CreatedDate: '2026-09-22T10:00:00Z',
+              AuthorEmailAddress: 'c@x.com',
+            },
+          ],
+        });
+      },
+    });
+    const id = await client.postNote({
+      subject: 'S',
+      bodyHtml: '<p>B</p>',
+      authorEmail: 'coo@x.com',
+      assigneeEmail: 'csa@x.com',
+      dueDate: '2026-09-25',
+      timeline: { entityType: 'Organization', entityKey: 'K-GOV' },
+    });
+    expect(id).toBe('N1');
+    expect(bodies[0]).toEqual({
+      Subject: 'S',
+      Body: '<p>B</p>',
+      AuthorEmailAddress: 'coo@x.com',
+      AssigneeEmailAddress: 'csa@x.com',
+      DueDate: '2026-09-25T00:00:00Z',
+      Timelines: [{ EntityType: 'Organization', EntityKey: 'K-GOV' }],
+    });
+    expect((await client.getNoteComments('N1')).map((c) => c.body)).toEqual(['first', 'second']);
+  });
+
+  it('retries a note only on 429; a network failure is uncertain, a 4xx is definitive', async () => {
+    const run = (fail: Error) => {
+      let n = 0;
+      const client = new KarbonClient({
+        sleep: () => Promise.resolve(),
+        transport: () => {
+          n += 1;
+          return n === 1 ? Promise.reject(fail) : Promise.resolve({ Id: 'N2' });
+        },
+      });
+      const note = {
+        subject: 'S',
+        bodyHtml: 'B',
+        authorEmail: 'a@x.com',
+        assigneeEmail: null,
+        dueDate: null,
+        timeline: { entityType: 'Organization' as const, entityKey: 'K' },
+      };
+      return { promise: client.postNote(note), calls: () => n };
+    };
+    const limited = run(new KarbonUnavailableError('429', 1, true));
+    expect(await limited.promise).toBe('N2');
+    expect(limited.calls()).toBe(2);
+
+    const reset = run(new KarbonUnavailableError('network'));
+    await expect(reset.promise).rejects.toBeInstanceOf(KarbonWriteUncertainError);
+    expect(reset.calls()).toBe(1);
+
+    const refused = run(new KarbonApiError('forbidden', 403));
+    await expect(refused.promise).rejects.toBeInstanceOf(KarbonApiError);
   });
 });

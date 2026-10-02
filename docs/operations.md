@@ -78,11 +78,52 @@ run at once. `pnpm tg karbon:check` isolates which call fails.
 `DATABASE_URL`, `KARBON_API_KEY`/`KARBON_API_SECRET`,
 `SENDGRID_API_KEY`/`SENDGRID_FROM_EMAIL`, or `TG_SHADOW_TO` in shadow mode.
 
+## Karbon governance notes
+
+Optional; off until `TG_KARBON_NOTES` is set. See the README for what is
+posted where.
+
+**Set up in Karbon (once):**
+
+1. Create a client type **Governance** (like the internal type), so these
+   clients can be excluded from client counts, lists and analytics.
+2. Create one client of that type per CSA (e.g. "Time Governance – CSA-1"),
+   one for the Partners, one per manager who should have one, and one for the
+   shadow trial. Set each to **Hidden** and its client team to just the people
+   who should see it (the CSA and the COO; the Partners; the manager).
+3. Give each a client ID (e.g. `TG-CSA1`) and put it in the roster
+   workbook's **Recipients** tab, **Karbon Client ID** column. Managers get a
+   `Manager` row there just to carry their ID.
+4. Confirm the Karbon API key may **create notes** (the rest of the app only
+   reads).
+5. Set `KARBON_NOTE_AUTHOR` (the Karbon user notes are posted as) and, for
+   the trial, `KARBON_NOTES_SHADOW_CLIENT_ID`.
+
+**Rollout:** a dry run previews the notes in `out/` (and still refuses any
+client that isn't Hidden + Governance); `TG_KARBON_NOTES=shadow` posts every
+note to the shadow client, assigned to `TG_SHADOW_TO`, while still checking the
+real clients; then `live`.
+
+**CSA follow-up:** CSAs comment on Tuesday's notes as they follow up. Friday
+reads the latest two comments per escalated person into the Partner email and
+note — nothing to configure.
+
+**"refused" in the admin summary:** the named client isn't Hidden, isn't the
+Governance type, or doesn't exist. Fix it in Karbon (or the Recipients tab)
+and re-run the job; nothing was posted.
+
+**"in_doubt":** the post to Karbon was cut off mid-flight, so the note may or
+may not exist. It is not retried (notes can't be deleted through the API, so a
+retry could leave a duplicate forever). Check the client's timeline in Karbon;
+if it isn't there, delete its row from `karbon_notes` (status `posting`) and
+re-run.
+
 ## Changing a rule
 
 Thresholds are environment settings — change the secret and redeploy:
 `MINIMAL_WEEK_HOURS`, `FULL_TIME_WEEK_HOURS`, `AD_HOC_WEEKLY_HOURS`,
 `AD_HOC_RECURRING_WEEKS`, `AD_HOC_RECURRING_MIN_HOURS`, `NONBILLABLE_MIN_DESCRIPTION_CHARS`,
 `INTERNAL_ONLY_ROLE_MARKER`, `ESCALATION_LOOKBACK_WEEKS`, `UTILIZATION_DROP_POINTS`,
+`TG_KARBON_NOTES`, `KARBON_GOVERNANCE_CLIENT_TYPE`,
 `HISTORY_RETENTION_DAYS`. Schedules (Tue/Fri 9:00, week-2 Monday 9:00) are
 in `src/worker.ts`.

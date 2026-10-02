@@ -16,6 +16,28 @@ run Node 24 or a container, with Postgres: **Azure** ([docs/azure.md](docs/azure
 recommended — data stays in the firm's tenant) or **Replit** (`.replit`).
 Admin commands run from a laptop in VS Code.
 
+## Karbon governance notes (optional)
+
+The emails are the alert; Karbon can hold the history, for people who live in
+Karbon rather than their inbox. With `TG_KARBON_NOTES` on, each run also
+posts notes to **Hidden clients of the Governance type** — one per CSA, one for
+the Partners, one per manager (their client IDs go in the roster workbook's
+Recipients tab):
+
+- **Tuesday:** a note per flagged person on their CSA's governance client,
+  assigned to the CSA, due Friday, listing the flags and entries.
+- **Friday:** the CSA's comments on those notes are read back and printed in
+  the Partner email ("CSA follow-up: spoke Tuesday, entering by Thursday"),
+  and the escalation itself is posted to the Partners' governance client.
+- **Monthly:** each manager's report is posted to their governance client.
+
+A note only goes to a client that Karbon reports as **Hidden** and of type
+**`KARBON_GOVERNANCE_CLIENT_TYPE`** — checked on every run (dry runs and
+shadow included), so loosening a client's visibility in Karbon stops the notes
+rather than exposing them. Karbon notes can't be deleted through the API, so
+every post is claimed once and never blindly retried. Setup:
+[docs/operations.md](docs/operations.md#karbon-governance-notes).
+
 ## The checks
 
 | Check                                     | Flags when                                                                                                          |
@@ -102,8 +124,9 @@ pnpm demo          # simulated 3-week run, fictional staff → out/demo (sends n
 
 ## Data
 
-- **Karbon** — read-only: users, capacity, individual time entries, work-item
-  titles. Nothing is written back.
+- **Karbon** — reads users, capacity, individual time entries and work-item
+  titles. Writes nothing unless governance notes are on; then it posts notes
+  to Hidden Governance clients only.
 - **SendGrid** — receives the email content (staff names, departments, hours,
   flags). Recipients are internal staff only. Open/click tracking is off.
 - **Postgres** — the roster, each person's weekly flags and hours, ad hoc

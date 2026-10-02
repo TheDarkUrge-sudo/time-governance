@@ -46,7 +46,7 @@ function entryLine(kind: FlagKind, e: FlagEntry): string {
   return parts.join(' · ');
 }
 
-function entryLines(f: Flag): string[] {
+export function entryLines(f: Flag): string[] {
   const list = f.entries ?? [];
   const lines = list.slice(0, MAX_ENTRIES).map((e) => entryLine(f.kind, e));
   if (list.length > MAX_ENTRIES) {

@@ -20,6 +20,7 @@ import { runFriday } from '../src/jobs/friday';
 import { runMonthly } from '../src/jobs/monthly';
 import { runTuesday } from '../src/jobs/tuesday';
 import { KarbonClient } from '../src/karbon/client';
+import { GovernanceClients } from '../src/karbon/governance-notes';
 import { DEFAULT_POLICY } from '../src/policy';
 
 const HFA = 'C-HFA';
@@ -72,10 +73,49 @@ const members = [
 const roster: Roster = {
   members,
   recipients: [
-    { role: 'csa', slot: 'CSA-1', name: 'Casey Morgan', email: 'cmorgan@example.com' },
-    { role: 'csa', slot: 'CSA-2', name: 'Robin Hayes', email: 'rhayes@example.com' },
-    { role: 'partner', slot: null, name: 'Pat Morrison', email: 'pmorrison@example.com' },
-    { role: 'partner', slot: null, name: 'Lee Grant', email: 'lgrant@example.com' },
+    {
+      role: 'csa',
+      slot: 'CSA-1',
+      name: 'Casey Morgan',
+      email: 'cmorgan@example.com',
+      karbonClientId: 'TG-CSA1',
+    },
+    {
+      role: 'csa',
+      slot: 'CSA-2',
+      name: 'Robin Hayes',
+      email: 'rhayes@example.com',
+      karbonClientId: 'TG-CSA2',
+    },
+    {
+      role: 'partner',
+      slot: null,
+      name: 'Pat Morrison',
+      email: 'pmorrison@example.com',
+      karbonClientId: 'TG-PARTNERS',
+    },
+    {
+      role: 'partner',
+      slot: null,
+      name: 'Lee Grant',
+      email: 'lgrant@example.com',
+      karbonClientId: 'TG-PARTNERS',
+    },
+    // Manager rows only link a manager to their Governance client.
+    {
+      role: 'manager',
+      slot: null,
+      name: 'Dana Ferris',
+      email: 'dferris@example.com',
+      karbonClientId: 'TG-DANA',
+    },
+    {
+      role: 'manager',
+      slot: null,
+      name: 'Sam Patel',
+      email: 'spatel@example.com',
+      karbonClientId: 'TG-SAM',
+    },
   ],
   taskTypes: new Map([
     ['audit fieldwork', 'billable'],
@@ -242,11 +282,37 @@ function week(monday: string): { tuesday: Raw[]; friday: Raw[] } {
 
 /* ── Fake Karbon ──────────────────────────────────────────────────────────── */
 
-const state = { entries: [] as Raw[] };
+const state = {
+  entries: [] as Raw[],
+  notes: [] as { id: string; label: string; body: Record<string, unknown> }[],
+  comments: {} as Record<
+    string,
+    { CommentBody: string; CreatedDate: string; AuthorEmailAddress: string }[]
+  >,
+};
 const karbon = new KarbonClient({
   sleep: () => Promise.resolve(),
-  transport: (p) => {
+  transport: (p, init) => {
     const q = decodeURIComponent(p);
+    if (init) {
+      const id = `note-${state.notes.length + 1}`;
+      state.notes.push({ id, label, body: init.body as Record<string, unknown> });
+      return Promise.resolve({ Id: id });
+    }
+    if (q.startsWith('/v3/Notes/')) {
+      const id = q.slice('/v3/Notes/'.length);
+      return Promise.resolve({ Id: id, Comments: state.comments[id] ?? [] });
+    }
+    // Every governance client in the demo is a Hidden "Governance" organization.
+    const udi = /GetOrganizationByUserDefinedIdentifier\(UserDefinedIdentifier='([^']+)'\)/.exec(q);
+    if (udi) {
+      return Promise.resolve({
+        OrganizationKey: `K-${udi[1]}`,
+        FullName: `Time Governance – ${udi[1]}`,
+        RestrictionLevel: 'Hidden',
+        ContactType: 'Governance',
+      });
+    }
     if (q.startsWith('/v3/Users?')) return Promise.resolve({ value: users });
     if (q.startsWith('/v3/Users/')) {
       const id = q.slice('/v3/Users/'.length);
@@ -308,6 +374,16 @@ const deps: JobDeps = {
   adHocTitle: 'Ad Hoc',
   retentionDays: 400,
   setupNotes: [],
+  notes: {
+    mode: 'live',
+    author: 'coo@example.com',
+    requiredClientType: 'Governance',
+    shadowClientId: null,
+    shadowAssignee: null,
+    dryRun: false,
+    outDir: null,
+  },
+  governance: new GovernanceClients(karbon, 'Governance'),
 };
 
 const weeks = ['2026-09-07', '2026-09-14', '2026-09-21'];
@@ -318,6 +394,20 @@ for (const monday of weeks) {
   label = `${monday}-1-tuesday`;
   await runTuesday(deps, weekOf(monday));
   state.entries.push(...w.friday);
+  if (monday === '2026-09-21') {
+    // Casey follows up with Riley and records it on Riley's Karbon note.
+    const rileyNote = state.notes.find(
+      (n) => n.label === `${monday}-1-tuesday` && String(n.body.Subject).includes('Riley Chen'),
+    )!;
+    state.comments[rileyNote.id] = [
+      {
+        CommentBody:
+          'Spoke to Riley Tuesday. Behind after the 9/15 deadlines; entering the rest by Thursday.',
+        CreatedDate: '2026-09-29T15:20:00Z',
+        AuthorEmailAddress: 'cmorgan@example.com',
+      },
+    ];
+  }
   label = `${monday}-2-friday`;
   await runFriday(deps, weekOf(monday));
   all.push(...w.tuesday, ...w.friday);
@@ -352,6 +442,32 @@ for (const [i, { label: l, msg }] of captured.entries()) {
   );
   console.log(`${name}\n    to ${msg.to.join(', ')}`);
 }
+// The Karbon governance notes, as HTML previews.
+for (const [i, n] of state.notes.entries()) {
+  const b = n.body as {
+    Subject: string;
+    Body: string;
+    AuthorEmailAddress: string;
+    AssigneeEmailAddress?: string;
+    DueDate?: string;
+    Timelines: { EntityKey: string }[];
+  };
+  const name = `note-${String(i + 1).padStart(2, '0')}-${n.label}-${b.Subject.replace(
+    /[^a-z0-9]+/gi,
+    '-',
+  )
+    .toLowerCase()
+    .slice(0, 50)}.html`;
+  const timeline = b.Timelines[0]!.EntityKey;
+  await writeFile(
+    path.join(out, name),
+    `<!doctype html><meta charset="utf-8"><body style="font:13px Arial;max-width:640px;margin:24px">
+<p style="color:#666;font-size:12px">Karbon note on ${timeline.replace('K-', '')} · by ${b.AuthorEmailAddress}${b.AssigneeEmailAddress ? ` · assigned to ${b.AssigneeEmailAddress}` : ''}${b.DueDate ? ` · due ${b.DueDate.slice(0, 10)}` : ''}</p>
+<h3>${b.Subject}</h3>${b.Body}</body>`,
+  );
+}
+console.log(`\n${state.notes.length} Karbon notes posted (fake Karbon)`);
+
 // What `pnpm tg history riley` and `pnpm tg history --export 2026` produce.
 const [riley] = await findPeople(store, roster, 'riley');
 const esc = await store.escalationHistory({ email: riley!.email });

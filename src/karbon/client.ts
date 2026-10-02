@@ -6,6 +6,8 @@
  *   GET /v3/Users/{id}               one user, with CapacityMinutesPerWeek
  *   GET /v3/IndividualTimeEntries    one row per user × day × work item (paged by 1,000)
  *   GET /v3/WorkItems                filtered to each client's Ad Hoc work item (paged by 100)
+ *   GET …ByUserDefinedIdentifier     a client by the firm's own client ID (99999, governance clients)
+ *   POST /v3/Notes, GET /v3/Notes/{id}  governance notes and their comments (off unless enabled)
  *
  * Payloads are zod-parsed at this boundary; nothing past it trusts Karbon's
  * shape. A 429 or 5xx is retried a few times with backoff (honouring
@@ -28,6 +30,8 @@ export class KarbonUnavailableError extends Error {
   constructor(
     message: string,
     readonly retryAfterSeconds?: number,
+    /** True only for a 429: Karbon refused the request, so even a write is safe to retry. */
+    readonly rateLimited = false,
   ) {
     super(message);
     this.name = 'KarbonUnavailableError';
@@ -52,15 +56,24 @@ export class KarbonNotConfiguredError extends Error {
   }
 }
 
-/** One GET; resolves to the parsed JSON body. */
-export type KarbonTransport = (path: string) => Promise<unknown>;
+/** One request; resolves to the parsed JSON body. GET unless `init` says POST. */
+export type KarbonTransport = (
+  path: string,
+  init?: { method: 'POST'; body: unknown },
+) => Promise<unknown>;
 
 export function liveTransport(bearer: string, accessKey: string): KarbonTransport {
-  return async (path) => {
+  return async (path, init) => {
     let res: Response;
     try {
       res = await fetch(`${BASE_URL}${path}`, {
-        headers: { Authorization: `Bearer ${bearer}`, AccessKey: accessKey },
+        method: init?.method ?? 'GET',
+        headers: {
+          Authorization: `Bearer ${bearer}`,
+          AccessKey: accessKey,
+          ...(init ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: init ? JSON.stringify(init.body) : undefined,
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (err) {
@@ -73,6 +86,7 @@ export function liveTransport(bearer: string, accessKey: string): KarbonTranspor
       throw new KarbonUnavailableError(
         'Karbon responded HTTP 429',
         Number.isFinite(retry) && retry >= 0 ? retry : undefined,
+        true,
       );
     }
     if (res.status >= 500) throw new KarbonUnavailableError(`Karbon responded HTTP ${res.status}`);
@@ -129,13 +143,49 @@ export interface KarbonClientRef {
   clientKey: string;
   name: string | null;
   type: 'Organization' | 'Contact' | 'ClientGroup';
+  /** Public | Private | Hidden — only Hidden clients may hold governance notes. */
+  restrictionLevel: string | null;
+  /** The firm's client type (e.g. "Internal", "Governance"). */
+  clientType: string | null;
 }
+
+/** A write whose outcome is unknown (timeout, reset, 5xx): it may or may not have landed. */
+export class KarbonWriteUncertainError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'KarbonWriteUncertainError';
+  }
+}
+
+export interface NoteComment {
+  author: string | null;
+  createdAt: string | null;
+  body: string;
+}
+
+const rawNote = z.object({
+  Id: z.string().nullish(),
+  Comments: z
+    .array(
+      z.object({
+        CommentBody: z.string().nullish(),
+        CreatedDate: z.string().nullish(),
+        AuthorEmailAddress: z.string().nullish(),
+      }),
+    )
+    .nullish(),
+});
 
 const LOOKUPS = [
   {
     type: 'Organization',
     path: 'Organizations/GetOrganizationByUserDefinedIdentifier',
-    schema: z.object({ OrganizationKey: z.string().min(1), FullName: z.string().nullish() }),
+    schema: z.object({
+      OrganizationKey: z.string().min(1),
+      FullName: z.string().nullish(),
+      RestrictionLevel: z.string().nullish(),
+      ContactType: z.string().nullish(),
+    }),
     key: (r: Record<string, unknown>) => r.OrganizationKey as string,
   },
   {
@@ -145,13 +195,20 @@ const LOOKUPS = [
       ContactKey: z.string().min(1),
       FirstName: z.string().nullish(),
       LastName: z.string().nullish(),
+      RestrictionLevel: z.string().nullish(),
+      ContactType: z.string().nullish(),
     }),
     key: (r: Record<string, unknown>) => r.ContactKey as string,
   },
   {
     type: 'ClientGroup',
     path: 'ClientGroups/GetClientGroupByUserDefinedIdentifier',
-    schema: z.object({ ClientGroupKey: z.string().min(1), FullName: z.string().nullish() }),
+    schema: z.object({
+      ClientGroupKey: z.string().min(1),
+      FullName: z.string().nullish(),
+      RestrictionLevel: z.string().nullish(),
+      ContactType: z.string().nullish(),
+    }),
     key: (r: Record<string, unknown>) => r.ClientGroupKey as string,
   },
 ] as const;
@@ -309,9 +366,75 @@ export class KarbonClient {
         'FullName' in r
           ? ((r.FullName as string | null | undefined) ?? null)
           : [r.FirstName, r.LastName].filter(Boolean).join(' ') || null;
-      return { clientKey: lookup.key(r), name, type: lookup.type };
+      return {
+        clientKey: lookup.key(r),
+        name,
+        type: lookup.type,
+        restrictionLevel: (r.RestrictionLevel as string | null | undefined) ?? null,
+        clientType: (r.ContactType as string | null | undefined) ?? null,
+      };
     }
     return null;
+  }
+
+  /**
+   * Posts a note. Retried only on a 429 (Karbon refused it); a timeout, reset
+   * or 5xx throws KarbonWriteUncertainError — the note may exist, and Karbon
+   * notes cannot be deleted through the API, so it is never blindly re-posted.
+   */
+  async postNote(note: {
+    subject: string;
+    bodyHtml: string;
+    authorEmail: string;
+    assigneeEmail: string | null;
+    dueDate: string | null;
+    timeline: { entityType: KarbonClientRef['type']; entityKey: string };
+  }): Promise<string> {
+    const body = {
+      Subject: note.subject,
+      Body: note.bodyHtml,
+      AuthorEmailAddress: note.authorEmail,
+      ...(note.assigneeEmail ? { AssigneeEmailAddress: note.assigneeEmail } : {}),
+      ...(note.dueDate ? { DueDate: `${note.dueDate}T00:00:00Z` } : {}),
+      Timelines: [{ EntityType: note.timeline.entityType, EntityKey: note.timeline.entityKey }],
+    };
+    for (let attempt = 1; ; attempt++) {
+      let payload: unknown;
+      try {
+        payload = await this.transport('/v3/Notes', { method: 'POST', body });
+      } catch (err) {
+        if (err instanceof KarbonUnavailableError && err.rateLimited && attempt < MAX_ATTEMPTS) {
+          await this.sleep((err.retryAfterSeconds ?? 2 ** attempt) * 1000);
+          continue;
+        }
+        if (err instanceof KarbonApiError) throw err; // definitive: nothing was created
+        throw new KarbonWriteUncertainError(
+          `Karbon note post did not complete (${err instanceof Error ? err.message : 'error'})`,
+        );
+      }
+      const parsed = rawNote.safeParse(payload);
+      if (!parsed.success || !parsed.data.Id) {
+        throw new KarbonWriteUncertainError('Karbon accepted the note but returned no Id');
+      }
+      return parsed.data.Id;
+    }
+  }
+
+  /** A note's comments, oldest first. */
+  async getNoteComments(noteId: string): Promise<NoteComment[]> {
+    const payload = await this.get(`/v3/Notes/${encodeURIComponent(noteId)}`);
+    const parsed = rawNote.safeParse(payload);
+    if (!parsed.success) {
+      throw new KarbonUnavailableError('Karbon /v3/Notes/{id} did not match the expected shape');
+    }
+    return (parsed.data.Comments ?? [])
+      .map((c) => ({
+        author: c.AuthorEmailAddress ?? null,
+        createdAt: c.CreatedDate ?? null,
+        body: (c.CommentBody ?? '').trim(),
+      }))
+      .filter((c) => c.body.length > 0)
+      .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
   }
 
   /**

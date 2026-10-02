@@ -170,4 +170,3 @@ export const karbonNotes = pgTable(
   },
   (t) => [uniqueIndex('karbon_notes_once').on(t.kind, t.period, t.subjectKey, t.mode)],
 );
-

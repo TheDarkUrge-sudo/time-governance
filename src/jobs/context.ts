@@ -3,6 +3,14 @@ import type { Policy, Roster } from '../domain';
 import type { AdminSection } from '../email/admin-summary';
 import { renderAdminSummary } from '../email/admin-summary';
 import type { KarbonClient } from '../karbon/client';
+import {
+  describeNoteResults,
+  type GovernanceClients,
+  type NoteDelivery,
+  type NoteResult,
+  type NotesContext,
+  postGovernanceNote,
+} from '../karbon/governance-notes';
 import { deliver, type DeliveryContext, type DeliveryResult, describeResults } from './deliver';
 
 export interface JobDeps {
@@ -19,6 +27,26 @@ export interface JobDeps {
   retentionDays: number;
   /** Setup problems found while preparing the run, reported in the Tuesday admin summary. */
   setupNotes: string[];
+  /** Karbon governance notes (mode off unless TG_KARBON_NOTES is set). */
+  notes: NotesContext;
+  governance: GovernanceClients | null;
+}
+
+/** Posts one governance note with this run's dependencies. */
+export function postNote(deps: JobDeps, d: NoteDelivery): Promise<NoteResult> {
+  return postGovernanceNote(
+    deps.notes,
+    { karbon: deps.karbon, store: deps.store, clients: deps.governance },
+    d,
+  );
+}
+
+/** The admin-summary section listing what happened to each Karbon note. */
+export function notesSection(deps: JobDeps, results: NoteResult[]): AdminSection {
+  return {
+    title: `Karbon notes (${deps.notes.mode})`,
+    lines: deps.notes.mode === 'off' ? [] : describeNoteResults(results),
+  };
 }
 
 export interface JobResult {

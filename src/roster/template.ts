@@ -18,7 +18,7 @@ export const ROSTER_HEADERS = [
   'Exclude From Checks',
   'Hire Date',
 ] as const;
-export const RECIPIENT_HEADERS = ['Role', 'CSA Slot', 'Name', 'Email'] as const;
+export const RECIPIENT_HEADERS = ['Role', 'CSA Slot', 'Name', 'Email', 'Karbon Client ID'] as const;
 export const TASK_TYPE_HEADERS = ['Task Type', 'Category'] as const;
 export const HOLIDAY_HEADERS = ['Date', 'Holiday'] as const;
 
@@ -26,7 +26,7 @@ export const DEPARTMENTS = ['Audit', 'Tax', 'Bookkeeping', 'Advisory', 'Admin'];
 export const STATUSES = ['Active', 'Inactive'];
 export const CSA_SLOTS = ['CSA-1', 'CSA-2', 'CSA-3'];
 export const CATEGORIES = ['Billable', 'Non-billable', 'PTO', 'Sick'];
-export const ROLES = ['CSA', 'Partner'];
+export const ROLES = ['CSA', 'Partner', 'Manager'];
 export const YES_NO = ['Yes', 'No'];
 
 const BRAND = 'FFBA2025';
@@ -113,12 +113,13 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
   const recipients = wb.addWorksheet('Recipients');
   note(
     recipients,
-    'Who receives each email. One row per CSA slot (Tuesday review) and one per Partner (Friday escalation). Managers come from the Roster’s Manager Email.',
+    'Who receives each email: one row per CSA slot (Tuesday review) and one per Partner (Friday escalation). Karbon Client ID (optional) = that person’s Hidden Governance client in Karbon, where their notes are kept. Add Manager rows only to give a manager a Governance client — manager emails come from the Roster.',
     RECIPIENT_HEADERS.length,
   );
+  recipients.getRow(1).height = 48;
   header(recipients, RECIPIENT_HEADERS);
-  widths(recipients, [12, 12, 24, 30]);
-  list(recipients, 'A', 'Lists!$F$2:$F$3');
+  widths(recipients, [12, 12, 24, 30, 18]);
+  list(recipients, 'A', 'Lists!$F$2:$F$4');
   list(recipients, 'B', 'Lists!$C$2:$C$20');
 
   const tasks = wb.addWorksheet('Task Types');

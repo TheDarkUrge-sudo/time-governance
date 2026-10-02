@@ -4,7 +4,15 @@ import { escalations } from '../checks/escalation';
 import { MISSING_KINDS, runWeeklyChecks } from '../checks/weekly';
 import type { DateRange } from '../domain';
 import { renderPartnerEscalation } from '../email/partner-escalation';
-import { finishWithAdminSummary, type JobDeps, type JobResult, recordRun } from './context';
+import { type NoteResult, textToNoteHtml } from '../karbon/governance-notes';
+import {
+  finishWithAdminSummary,
+  type JobDeps,
+  type JobResult,
+  notesSection,
+  postNote,
+  recordRun,
+} from './context';
 import { deliver, type DeliveryResult } from './deliver';
 
 export async function runFriday(deps: JobDeps, week: DateRange): Promise<JobResult> {
@@ -55,26 +63,64 @@ export async function runFriday(deps: JobDeps, week: DateRange): Promise<JobResu
       lookbackWeeks: deps.policy.escalationLookbackWeeks,
     });
 
+    // The CSAs' comments on Tuesday's Karbon notes travel with the escalation.
+    if (deps.store && deps.notes.mode !== 'off' && rows.length > 0) {
+      const tuesdayNotes = await deps.store.notesFor(
+        'employee_review',
+        week.start,
+        deps.notes.mode === 'shadow' ? 'shadow' : 'live',
+      );
+      for (const r of rows) {
+        const noteId = tuesdayNotes.get(r.member.email);
+        if (!noteId) continue;
+        try {
+          r.followUp = (await deps.karbon.getNoteComments(noteId)).slice(-2);
+        } catch (err) {
+          notes.push(
+            `Couldn't read ${r.member.name}'s Karbon note comments: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+    }
+
     const partners = deps.roster.recipients.filter((r) => r.role === 'partner').map((r) => r.email);
     const deliveries: DeliveryResult[] = [];
+    const noteResults: NoteResult[] = [];
     if (rows.length > 0) {
       const historyStartsWeek = deps.store
         ? ((await deps.store.firstFridayWeek()) ?? week.start)
         : null;
+      const content = renderPartnerEscalation({
+        week,
+        rows,
+        historyStartsWeek,
+        lookbackWeeks: deps.policy.escalationLookbackWeeks,
+      });
       deliveries.push(
         await deliver(deps.delivery, {
           kind: 'partner_escalation',
           period: week.start,
           recipientKey: 'partners',
           to: partners,
-          content: renderPartnerEscalation({
-            week,
-            rows,
-            historyStartsWeek,
-            lookbackWeeks: deps.policy.escalationLookbackWeeks,
-          }),
+          content,
         }),
       );
+      if (deps.notes.mode !== 'off') {
+        noteResults.push(
+          await postNote(deps, {
+            kind: 'partner_escalation',
+            period: week.start,
+            subjectKey: 'partners',
+            clientId:
+              deps.roster.recipients.find((r) => r.role === 'partner' && r.karbonClientId)
+                ?.karbonClientId ?? null,
+            assignee: null,
+            dueDate: null,
+            subject: content.subject,
+            bodyHtml: textToNoteHtml(content.text),
+          }),
+        );
+      }
     } else {
       notes.push('Nobody to escalate: everyone flagged on Tuesday has caught up.');
     }
@@ -96,6 +142,7 @@ export async function runFriday(deps: JobDeps, week: DateRange): Promise<JobResu
             `${r.member.name} — ${r.weeksFlagged} of the last ${r.lookbackWeeks} weeks, ${r.thisYear} this year`,
         ),
       },
+      notesSection(deps, noteResults),
     ];
     const all = await finishWithAdminSummary(
       deps,

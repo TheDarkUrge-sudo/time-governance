@@ -10,6 +10,7 @@ import { testDb } from '../db/test-db';
 import type { Roster } from '../domain';
 import { EmailSendError, type OutboundEmail } from '../email/sendgrid';
 import { KarbonClient } from '../karbon/client';
+import { NOTES_OFF } from '../karbon/governance-notes';
 import { DEFAULT_POLICY } from '../policy';
 import { member, TASK_TYPES } from '../test-fixtures';
 import type { JobDeps } from './context';
@@ -34,10 +35,34 @@ const okafor = member({
 const ROSTER: Roster = {
   members: [alvarez, chen, okafor],
   recipients: [
-    { role: 'csa', slot: 'CSA-1', name: 'Casey CSA', email: 'ccsa@hfacpas.com' },
-    { role: 'csa', slot: 'CSA-2', name: 'Drew CSA', email: 'dcsa@hfacpas.com' },
-    { role: 'partner', slot: null, name: 'Pat Partner', email: 'ppartner@hfacpas.com' },
-    { role: 'partner', slot: null, name: 'Lee Partner', email: 'lpartner@hfacpas.com' },
+    {
+      role: 'csa',
+      slot: 'CSA-1',
+      name: 'Casey CSA',
+      email: 'ccsa@hfacpas.com',
+      karbonClientId: null,
+    },
+    {
+      role: 'csa',
+      slot: 'CSA-2',
+      name: 'Drew CSA',
+      email: 'dcsa@hfacpas.com',
+      karbonClientId: null,
+    },
+    {
+      role: 'partner',
+      slot: null,
+      name: 'Pat Partner',
+      email: 'ppartner@hfacpas.com',
+      karbonClientId: null,
+    },
+    {
+      role: 'partner',
+      slot: null,
+      name: 'Lee Partner',
+      email: 'lpartner@hfacpas.com',
+      karbonClientId: null,
+    },
   ],
   taskTypes: TASK_TYPES,
   holidays: [],
@@ -150,6 +175,8 @@ describe('jobs (PGlite + fake Karbon + fake SendGrid)', () => {
       adHocTitle: 'Ad Hoc',
       retentionDays: 400,
       setupNotes: [],
+      notes: NOTES_OFF,
+      governance: null,
       ...over,
     };
   }

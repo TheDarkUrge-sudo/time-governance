@@ -97,6 +97,7 @@ async function status(): Promise<number> {
     `SendGrid:   ${emailConfigured() ? 'configured' : 'NOT configured'}`,
     `Admin to:   ${env.TG_ADMIN_TO.join(', ') || '(none)'}`,
     `Internal client: ID ${env.KARBON_INTERNAL_CLIENT_IDS.join(', ') || '(none)'}${env.KARBON_INTERNAL_CLIENT_KEYS.length ? ` + keys ${env.KARBON_INTERNAL_CLIENT_KEYS.join(', ')}` : ''}`,
+    `Karbon notes: ${env.TG_KARBON_NOTES}${env.TG_KARBON_NOTES !== 'off' ? ` (as ${env.KARBON_NOTE_AUTHOR ?? 'KARBON_NOTE_AUTHOR NOT SET'}; Hidden "${env.KARBON_GOVERNANCE_CLIENT_TYPE || 'any type'}" clients only)` : ''}`,
     `Timezone:   ${env.FIRM_TIMEZONE} (today ${today})`,
   );
   if (!env.DATABASE_URL) {

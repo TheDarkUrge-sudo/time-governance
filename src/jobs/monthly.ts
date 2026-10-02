@@ -3,7 +3,15 @@ import { monthLabel, monthRange, previousMonth } from '../calendar';
 import { attachTrend, runUtilization, type UtilizationRow } from '../checks/utilization';
 import { usersByEmail } from '../checks/weekly';
 import { renderManagerMonthly } from '../email/manager-monthly';
-import { finishWithAdminSummary, type JobDeps, type JobResult, recordRun } from './context';
+import { type NoteResult, textToNoteHtml } from '../karbon/governance-notes';
+import {
+  finishWithAdminSummary,
+  type JobDeps,
+  type JobResult,
+  notesSection,
+  postNote,
+  recordRun,
+} from './context';
 import { deliver, type DeliveryResult } from './deliver';
 
 const CAPACITY_CONCURRENCY = 4;
@@ -57,22 +65,40 @@ export async function runMonthly(deps: JobDeps, month: string): Promise<JobResul
     }
 
     const deliveries: DeliveryResult[] = [];
+    const noteResults: NoteResult[] = [];
     for (const [email, rows] of byManager) {
+      const content = renderManagerMonthly({
+        month,
+        previousMonth: prior,
+        managerName: rows[0]!.member.managerName,
+        rows,
+        dropPoints: deps.policy.utilizationDropPoints,
+      });
       deliveries.push(
         await deliver(deps.delivery, {
           kind: 'manager_monthly',
           period: month,
           recipientKey: `manager:${email}`,
           to: [email],
-          content: renderManagerMonthly({
-            month,
-            previousMonth: prior,
-            managerName: rows[0]!.member.managerName,
-            rows,
-            dropPoints: deps.policy.utilizationDropPoints,
-          }),
+          content,
         }),
       );
+      if (deps.notes.mode !== 'off') {
+        noteResults.push(
+          await postNote(deps, {
+            kind: 'manager_utilization',
+            period: month,
+            subjectKey: `manager:${email}`,
+            clientId:
+              deps.roster.recipients.find((r) => r.role === 'manager' && r.email === email)
+                ?.karbonClientId ?? null,
+            assignee: email,
+            dueDate: null,
+            subject: content.subject,
+            bodyHtml: textToNoteHtml(content.text),
+          }),
+        );
+      }
     }
 
     const sections = [
@@ -88,6 +114,7 @@ export async function runMonthly(deps: JobDeps, month: string): Promise<JobResul
         title: 'Capacity not set in Karbon (used roster hours or a full-time week)',
         lines: report.rows.filter((r) => r.capacitySource !== 'karbon').map((r) => r.member.name),
       },
+      notesSection(deps, noteResults),
     ];
     const all = await finishWithAdminSummary(
       deps,

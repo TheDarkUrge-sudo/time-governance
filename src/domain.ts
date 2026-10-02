@@ -26,11 +26,17 @@ export interface RosterMember {
 }
 
 export interface Recipient {
-  role: 'csa' | 'partner';
+  /** 'manager' rows only link a manager's email to their Karbon governance client. */
+  role: 'csa' | 'partner' | 'manager';
   /** The CSA slot ("CSA-1"); null for partners. */
   slot: string | null;
   name: string | null;
   email: string;
+  /**
+   * Karbon client ID (UserDefinedIdentifier) of this person's Hidden
+   * Governance client, where their governance notes are posted. Optional.
+   */
+  karbonClientId: string | null;
 }
 
 export interface Holiday {

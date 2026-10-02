@@ -107,6 +107,9 @@ az containerapp create \
     TG_SHADOW_TO='<COO email>' \
     TG_ADMIN_TO='<admin email>' \
     FIRM_TIMEZONE=America/New_York
+# Karbon governance notes (optional, later): add
+#   TG_KARBON_NOTES=shadow KARBON_NOTE_AUTHOR='<karbon user>' KARBON_NOTES_SHADOW_CLIENT_ID='<id>'
+# with `az containerapp update --set-env-vars …`.
 ```
 
 No ingress: the worker serves nothing. On start it applies any new

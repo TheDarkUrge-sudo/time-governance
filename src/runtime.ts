@@ -6,6 +6,7 @@ import { emailConfigured, sendgridTransport } from './email/sendgrid';
 import { env } from './env';
 import type { JobDeps } from './jobs/context';
 import { KarbonClient } from './karbon/client';
+import { GovernanceClients } from './karbon/governance-notes';
 import { resolveInternalClients } from './karbon/internal-client';
 import { policyFromEnv } from './policy';
 
@@ -30,6 +31,16 @@ export async function liveRuntime(opts: {
   }
   const roster = opts.roster ?? (await store!.loadRoster());
   const sendable = !opts.dryRun && env.TG_MODE !== 'off';
+  if (!opts.dryRun && env.TG_KARBON_NOTES !== 'off') {
+    if (!env.KARBON_NOTE_AUTHOR) {
+      throw new Error(
+        'TG_KARBON_NOTES is on but KARBON_NOTE_AUTHOR (the Karbon user notes are posted as) is not set.',
+      );
+    }
+    if (env.TG_KARBON_NOTES === 'shadow' && !env.KARBON_NOTES_SHADOW_CLIENT_ID) {
+      throw new Error('TG_KARBON_NOTES is "shadow" but KARBON_NOTES_SHADOW_CLIENT_ID is not set.');
+    }
+  }
   if (sendable && env.TG_MODE === 'shadow' && !env.TG_SHADOW_TO) {
     throw new Error('TG_MODE is "shadow" but TG_SHADOW_TO is not set — nowhere to send.');
   }
@@ -62,6 +73,16 @@ export async function liveRuntime(opts: {
       adHocTitle: env.KARBON_AD_HOC_TITLE,
       retentionDays: env.HISTORY_RETENTION_DAYS,
       setupNotes: internal.notes,
+      notes: {
+        mode: env.TG_KARBON_NOTES,
+        author: env.KARBON_NOTE_AUTHOR ?? null,
+        requiredClientType: env.KARBON_GOVERNANCE_CLIENT_TYPE || null,
+        shadowClientId: env.KARBON_NOTES_SHADOW_CLIENT_ID ?? null,
+        shadowAssignee: env.TG_SHADOW_TO ?? null,
+        dryRun: opts.dryRun,
+        outDir: opts.outDir,
+      },
+      governance: new GovernanceClients(karbon, env.KARBON_GOVERNANCE_CLIENT_TYPE || null),
     },
     close,
   };

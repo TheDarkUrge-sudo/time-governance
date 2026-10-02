@@ -192,6 +192,8 @@ function readRecipients(ws: ExcelJS.Worksheet, problems: string[]): Recipient[] 
     email: 'Email',
   });
   if (!cols) return [];
+  // Optional, so workbooks made before governance notes still import.
+  const clientIdCol = optionalColumn(ws, cols.headerRow, 'Karbon Client ID');
   const out: Recipient[] = [];
   eachDataRow(ws, cols.headerRow, (row, n) => {
     const at = `Recipients row ${n}`;
@@ -200,14 +202,24 @@ function readRecipients(ws: ExcelJS.Worksheet, problems: string[]): Recipient[] 
     const name = cellText(row, cols.map.name);
     const rawEmail = cellText(row, cols.map.email).toLowerCase();
     if (!role && !rawEmail && !name) return;
-    if (role !== 'csa' && role !== 'partner') {
-      problems.push(`${at}: Role must be CSA or Partner.`);
+    if (role !== 'csa' && role !== 'partner' && role !== 'manager') {
+      problems.push(`${at}: Role must be CSA, Partner or Manager.`);
       return;
     }
     if (role === 'csa' && !slot) problems.push(`${at}: a CSA row needs its CSA Slot.`);
+    const karbonClientId = clientIdCol ? cellText(row, clientIdCol) || null : null;
+    if (role === 'manager' && !karbonClientId) {
+      problems.push(`${at}: a Manager row is only for linking a Karbon Client ID — add one.`);
+    }
     const email = checkEmail(rawEmail, `${at}: Email`, problems, true);
     if (!email) return;
-    out.push({ role, slot: role === 'csa' ? slot : null, name: name || null, email });
+    out.push({
+      role,
+      slot: role === 'csa' ? slot : null,
+      name: name || null,
+      email,
+      karbonClientId,
+    });
   });
   return out;
 }
@@ -294,6 +306,15 @@ function headerColumns<K extends string>(
   }
   problems.push(`The ${ws.name} tab has no "${anchor}" header row.`);
   return null;
+}
+
+/** A column that may be absent (older workbooks); its index, or null. */
+function optionalColumn(ws: ExcelJS.Worksheet, headerRow: number, label: string): number | null {
+  let found: number | null = null;
+  ws.getRow(headerRow).eachCell((cell, col) => {
+    if (textOf(cell.value).trim().toLowerCase() === label.toLowerCase()) found = col;
+  });
+  return found;
 }
 
 function eachDataRow(

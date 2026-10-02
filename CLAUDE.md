@@ -52,4 +52,7 @@ database is in-process PGlite with the real migrations (`src/db/test-db.ts`).
 - Brand: `#BA2025` only in the email top bar; tables use the charcoal header;
   status reds are tinted, never a solid fill. Never `#8B1A1A`.
 - Nothing sends twice: every email goes through `deliver()` and its claim.
+- Karbon notes go through `postGovernanceNote()` only: Hidden + Governance-type
+  clients, checked every run (dry runs and shadow too); claimed before posting;
+  never re-posted on an uncertain failure (the API cannot delete a note).
 - `out/` holds real staff data from dry runs — never commit it.

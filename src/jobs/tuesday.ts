@@ -4,11 +4,15 @@ import { runWeeklyChecks } from '../checks/weekly';
 import type { DateRange, RosterMember } from '../domain';
 import { unclassifiedLine } from '../email/admin-summary';
 import { renderCsaWeekly } from '../email/csa-weekly';
+import type { NoteResult } from '../karbon/governance-notes';
+import { employeeReviewNote, reviewDueDate } from '../karbon/note-bodies';
 import {
   finishWithAdminSummary,
   type JobDeps,
   type JobResult,
   minutesByUser,
+  notesSection,
+  postNote,
   recordRun,
   rosterHygiene,
 } from './context';
@@ -73,6 +77,32 @@ export async function runTuesday(deps: JobDeps, week: DateRange): Promise<JobRes
       if (!p.member.csaSlot || !csaRecipients.has(p.member.csaSlot)) unrouted.push(p.member);
     }
 
+    // Karbon governance notes: one per flagged person, on their CSA's Hidden
+    // Governance client, assigned to the CSA and due Friday.
+    const noteResults: NoteResult[] = [];
+    if (deps.notes.mode !== 'off') {
+      for (const [slot, who] of csaRecipients) {
+        const clientId =
+          deps.roster.recipients.find(
+            (r) => r.role === 'csa' && r.slot === slot && r.karbonClientId,
+          )?.karbonClientId ?? null;
+        for (const p of review.people.filter((x) => x.member.csaSlot === slot && x.flags.length)) {
+          const note = employeeReviewNote(p, week);
+          noteResults.push(
+            await postNote(deps, {
+              kind: 'employee_review',
+              period: week.start,
+              subjectKey: p.member.email,
+              clientId,
+              assignee: who.emails[0] ?? null,
+              dueDate: reviewDueDate(week),
+              ...note,
+            }),
+          );
+        }
+      }
+    }
+
     if (deps.store && !deps.delivery.dryRun) {
       await deps.store.saveWeeklyResults(week.start, 'tuesday', review.people);
       await deps.store.saveAdHocUsage(week.start, review.adHocUsage);
@@ -106,6 +136,7 @@ export async function runTuesday(deps: JobDeps, week: DateRange): Promise<JobRes
         title: 'Logged time in Karbon but not on the roster',
         lines: rosterHygiene(deps.roster, minutesByUser(entries), users),
       },
+      notesSection(deps, noteResults),
     ];
     const label = `${shortDate(week.start)} – ${shortDate(week.end)}`;
     const all = await finishWithAdminSummary(

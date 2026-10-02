@@ -5,6 +5,7 @@
  * occurrence (a quick reminder) from a habit (a conversation).
  */
 import type { RosterMember } from '../domain';
+import type { NoteComment } from '../karbon/client';
 import { type FlagKind, MISSING_KINDS, type WeeklyReview } from './weekly';
 
 export interface EscalationRow {
@@ -16,6 +17,8 @@ export interface EscalationRow {
   lookbackWeeks: number;
   /** Escalations so far this calendar year, this week included. */
   thisYear: number;
+  /** The CSA's latest comments on this person's Tuesday Karbon note, if notes are on. */
+  followUp?: NoteComment[];
 }
 
 export function escalations(opts: {

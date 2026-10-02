@@ -47,8 +47,12 @@ export function diffRoster(current: Roster, next: Roster): RosterDiff {
     if (fields.length > 0) changed.push({ email: m.email, name: m.name, fields });
   }
 
-  const key = (r: { role: string; slot: string | null; email: string }) =>
-    `${r.role}|${r.slot ?? ''}|${r.email}`;
+  const key = (r: {
+    role: string;
+    slot: string | null;
+    email: string;
+    karbonClientId: string | null;
+  }) => `${r.role}|${r.slot ?? ''}|${r.email}|${r.karbonClientId ?? ''}`;
   const recipientsChanged =
     JSON.stringify(current.recipients.map(key).sort()) !==
     JSON.stringify(next.recipients.map(key).sort());

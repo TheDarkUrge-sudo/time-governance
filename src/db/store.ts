@@ -12,6 +12,7 @@ import {
   escalations,
   holidays,
   jobRuns,
+  karbonNotes,
   recipients,
   rosterImports,
   rosterMembers,
@@ -48,7 +49,13 @@ export class Store {
         excluded: m.excluded,
         hireDate: m.hireDate,
       })),
-      recipients: recips.map((r) => ({ role: r.role, slot: r.slot, name: r.name, email: r.email })),
+      recipients: recips.map((r) => ({
+        role: r.role,
+        slot: r.slot,
+        name: r.name,
+        email: r.email,
+        karbonClientId: r.karbonClientId,
+      })),
       taskTypes: new Map(types.map((t) => [t.key, t.category])),
       holidays: days.map((h) => ({ date: h.date, name: h.name })),
     };
@@ -313,6 +320,51 @@ export class Store {
 
   async releaseSend(id: number): Promise<void> {
     await this.db.delete(emailSends).where(eq(emailSends.id, id));
+  }
+
+  /* ── Karbon governance notes ──────────────────────────────────────────── */
+
+  async claimNote(c: {
+    kind: string;
+    period: string;
+    subjectKey: string;
+    mode: SendMode;
+    clientKey: string;
+    subject: string;
+  }): Promise<number | null> {
+    const rows = await this.db
+      .insert(karbonNotes)
+      .values({ ...c, status: 'posting' })
+      .onConflictDoNothing()
+      .returning({ id: karbonNotes.id });
+    return rows[0]?.id ?? null;
+  }
+
+  async markNotePosted(id: number, noteId: string): Promise<void> {
+    await this.db
+      .update(karbonNotes)
+      .set({ status: 'posted', noteId })
+      .where(eq(karbonNotes.id, id));
+  }
+
+  async releaseNote(id: number): Promise<void> {
+    await this.db.delete(karbonNotes).where(eq(karbonNotes.id, id));
+  }
+
+  /** Posted notes of one kind and period, by subject key → Karbon note id. */
+  async notesFor(kind: string, period: string, mode: SendMode): Promise<Map<string, string>> {
+    const rows = await this.db
+      .select({ subjectKey: karbonNotes.subjectKey, noteId: karbonNotes.noteId })
+      .from(karbonNotes)
+      .where(
+        and(
+          eq(karbonNotes.kind, kind),
+          eq(karbonNotes.period, period),
+          eq(karbonNotes.mode, mode),
+          eq(karbonNotes.status, 'posted'),
+        ),
+      );
+    return new Map(rows.filter((r) => r.noteId).map((r) => [r.subjectKey, r.noteId!]));
   }
 
   /* ── Runs ─────────────────────────────────────────────────────────────── */

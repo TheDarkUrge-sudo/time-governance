@@ -126,9 +126,27 @@ describe('roster workbook', () => {
     expect(members[2]).toMatchObject({ excluded: true, managerEmail: null });
     expect(members[3]).toMatchObject({ active: false, utilizationTarget: 0.8 });
     expect(recipients).toEqual([
-      { role: 'csa', slot: 'CSA-1', name: 'Casey CSA', email: 'ccsa@hfacpas.com' },
-      { role: 'csa', slot: 'CSA-2', name: 'Drew CSA', email: 'dcsa@hfacpas.com' },
-      { role: 'partner', slot: null, name: 'Pat Partner', email: 'ppartner@hfacpas.com' },
+      {
+        role: 'csa',
+        slot: 'CSA-1',
+        name: 'Casey CSA',
+        email: 'ccsa@hfacpas.com',
+        karbonClientId: null,
+      },
+      {
+        role: 'csa',
+        slot: 'CSA-2',
+        name: 'Drew CSA',
+        email: 'dcsa@hfacpas.com',
+        karbonClientId: null,
+      },
+      {
+        role: 'partner',
+        slot: null,
+        name: 'Pat Partner',
+        email: 'ppartner@hfacpas.com',
+        karbonClientId: null,
+      },
     ]);
     expect([...taskTypes]).toEqual([
       ['audit fieldwork', 'billable'],
@@ -212,6 +230,45 @@ describe('roster workbook', () => {
       'The workbook has no "Task Types" tab.',
       'The Roster tab is missing column(s): Manager Email, Utilization Target %, Expected Weekly Hours, Exclude From Checks, Hire Date.',
     ]);
+  });
+});
+
+describe('roster workbook — governance clients', () => {
+  it('reads Karbon Client IDs and Manager rows; a Manager row needs an ID', async () => {
+    const parsed = await parseRosterWorkbook(
+      await workbook((wb) => {
+        GOOD(wb);
+        rows(wb, 'Recipients', [
+          ['CSA', 'CSA-1', 'Casey CSA', 'ccsa@hfacpas.com', 'TG-CSA1'],
+          ['CSA', 'CSA-2', 'Drew CSA', 'dcsa@hfacpas.com', null],
+          ['Partner', null, 'Pat Partner', 'ppartner@hfacpas.com', 'TG-PARTNERS'],
+          ['Manager', null, 'Dana Ferris', 'dferris@hfacpas.com', 'TG-DANA'],
+          ['Manager', null, 'Sam Patel', 'spatel@hfacpas.com', null],
+        ]);
+      }),
+    );
+    expect(parsed.roster.recipients.map((r) => [r.role, r.email, r.karbonClientId])).toEqual([
+      ['csa', 'ccsa@hfacpas.com', 'TG-CSA1'],
+      ['csa', 'dcsa@hfacpas.com', null],
+      ['partner', 'ppartner@hfacpas.com', 'TG-PARTNERS'],
+      ['manager', 'dferris@hfacpas.com', 'TG-DANA'],
+      ['manager', 'spatel@hfacpas.com', null],
+    ]);
+    expect(parsed.problems).toEqual([
+      'Recipients row 7: a Manager row is only for linking a Karbon Client ID — add one.',
+    ]);
+  });
+
+  it('still imports a Recipients tab made before the Karbon Client ID column', async () => {
+    const parsed = await parseRosterWorkbook(
+      await workbook((wb) => {
+        GOOD(wb);
+        const ws = wb.getWorksheet('Recipients')!;
+        ws.spliceColumns(5, 1);
+      }),
+    );
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.roster.recipients.every((r) => r.karbonClientId === null)).toBe(true);
   });
 });
 

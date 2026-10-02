@@ -54,6 +54,22 @@ const schema = z.object({
   /** Gets a short summary after every run: what was sent, plus roster fixes needed. */
   TG_ADMIN_TO: csv.pipe(z.array(z.email())),
 
+  /**
+   * Karbon governance notes: off (default) · shadow (every note goes to the
+   * shadow governance client, assigned to TG_SHADOW_TO) · live. Notes only
+   * ever go to Hidden clients of KARBON_GOVERNANCE_CLIENT_TYPE.
+   */
+  TG_KARBON_NOTES: z.preprocess(blankToUndefined, z.enum(['off', 'shadow', 'live']).default('off')),
+  /** The Karbon user the notes are posted as. Required when notes are on. */
+  KARBON_NOTE_AUTHOR: optionalEmail,
+  /** The client type governance clients must have (blank = don't check the type). */
+  KARBON_GOVERNANCE_CLIENT_TYPE: z.preprocess(
+    (v) => (v === undefined ? 'Governance' : v),
+    z.string().trim(),
+  ),
+  /** The governance client (by client ID) that receives every note in shadow mode. */
+  KARBON_NOTES_SHADOW_CLIENT_ID: optionalString,
+
   FIRM_TIMEZONE: z.preprocess(blankToUndefined, z.string().default('America/New_York')),
 
   // Thresholds (plan, decisions 1 and 5 — approved defaults).

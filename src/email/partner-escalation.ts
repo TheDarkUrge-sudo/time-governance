@@ -4,7 +4,17 @@ import type { EscalationRow } from '../checks/escalation';
 import { FLAG_LABELS } from '../checks/weekly';
 import type { DateRange } from '../domain';
 import { escapeHtml } from '../format';
-import { type EmailContent, heading, MUTED, paragraph, pill, table, textFooter } from './layout';
+import { commentText } from '../karbon/governance-notes';
+import {
+  type EmailContent,
+  heading,
+  MUTED,
+  paragraph,
+  pill,
+  sectionLabel as sectionLabelHtml,
+  table,
+  textFooter,
+} from './layout';
 
 /** Escalated this many times in a calendar year counts as a pattern, even if not recent. */
 const YEAR_PATTERN = 3;
@@ -60,6 +70,25 @@ export function renderPartnerEscalation(opts: {
         `- ${r.member.name} (${r.member.department}; manager ${r.member.managerName ?? '—'}): ${FLAG_LABELS[r.kind]}, flagged ${r.weeksFlagged} of the last ${lookbackWeeks} weeks${yearNote(r)}`,
     ),
   ];
+
+  const withFollowUp = rows.filter((r) => r.followUp && r.followUp.length > 0);
+  if (withFollowUp.length > 0) {
+    html += `<div style="height:16px"></div>${sectionLabelHtml('CSA follow-up (from Karbon)')}`;
+    text.push('', 'CSA follow-up (from Karbon):');
+    for (const r of withFollowUp) {
+      for (const c of r.followUp!) {
+        const who = [
+          c.author?.split('@')[0],
+          c.createdAt ? shortDate(c.createdAt.slice(0, 10)) : null,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        const line = `${r.member.name}: “${commentText(c.body)}”${who ? ` (${who})` : ''}`;
+        html += `<p style="font-family:Arial,Helvetica,sans-serif;color:#333333;font-size:12px;line-height:1.5;margin:0 0 6px;">${escapeHtml(line)}</p>`;
+        text.push(`- ${line}`);
+      }
+    }
+  }
 
   if (repeat.length > 0) {
     const lines = repeat.map((r) =>
