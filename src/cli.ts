@@ -66,6 +66,9 @@ const { values, positionals } = parseArgs({
 const [command, arg] = positionals;
 const today = firmLocalDate(new Date(), env.FIRM_TIMEZONE);
 const say = (...lines: string[]) => console.log(lines.join('\n'));
+/** "2026-09-22 09:00" in the firm's time zone (never toISOString(), which is UTC). */
+const firmLocalDateTime = (d: Date) =>
+  d.toLocaleString('sv-SE', { timeZone: env.FIRM_TIMEZONE, hour12: false }).slice(0, 16);
 
 async function main(): Promise<number> {
   switch (command) {
@@ -111,12 +114,12 @@ async function status(): Promise<number> {
     const counts = await store.countRoster();
     const last = await store.lastRosterImport();
     say(
-      `Roster:     ${counts.members} people, ${counts.taskTypes} task types${last ? ` (uploaded ${last.createdAt.toISOString().slice(0, 10)} from ${last.fileName})` : ' — never uploaded'}`,
+      `Roster:     ${counts.members} people, ${counts.taskTypes} task types${last ? ` (uploaded ${firmLocalDate(last.createdAt, env.FIRM_TIMEZONE)} from ${last.fileName})` : ' — never uploaded'}`,
       '',
       'Recent runs:',
       ...(await store.recentRuns()).map(
         (r) =>
-          `  ${r.startedAt.toISOString().slice(0, 16)}  ${r.job.padEnd(8)} ${r.period}  ${r.status}${r.error ? `  ${r.error}` : ''}`,
+          `  ${firmLocalDateTime(r.startedAt)}  ${r.job.padEnd(8)} ${r.period}  ${r.status}${r.error ? `  ${r.error}` : ''}`,
       ),
     );
   } finally {
@@ -332,14 +335,15 @@ async function history(query: string | undefined): Promise<number> {
     const from = values.all ? undefined : addDays(today, -7 * 52);
     const weekly = await store.weeklyHistory({ email: person.email, from });
     const allEscalations = await store.escalationHistory({ email: person.email });
-    const totals = escalationTotals(allEscalations, today, 4);
+    const lookback = env.ESCALATION_LOOKBACK_WEEKS;
+    const totals = escalationTotals(allEscalations, today, lookback);
     const lines = timeline(
       weekly,
       allEscalations.filter((e) => !from || e.weekStart >= from),
     );
     say(
       `${person.name} <${person.email}>${person.department ? ` — ${person.department}` : ''}${person.managerName ? `, manager ${person.managerName}` : ''}${person.onRoster ? '' : '  (no longer on the roster)'}`,
-      `Escalated to Partners: ${totals.recent} in the last 4 weeks · ${totals.thisYear} this year · ${totals.allTime} all time${totals.since ? ` (first: week of ${totals.since})` : ''}`,
+      `Escalated to Partners: ${totals.recent} in the last ${lookback} weeks · ${totals.thisYear} this year · ${totals.allTime} all time${totals.since ? ` (first: week of ${totals.since})` : ''}`,
       '',
     );
     if (lines.length === 0) {

@@ -72,13 +72,22 @@ Re-running is always safe: every email is claimed before it is sent, so
 anything that already went out is skipped (`already_sent`).
 
 **A send failed** (`failed` in the run output or admin summary): SendGrid
-refused it, nothing was sent, and the claim was released — re-run the job
-and only that email goes out.
+refused it (a 4xx — bad key, unverified sender), nothing was sent, and the
+claim was released — fix the cause, re-run the job and only that email goes
+out.
 
-**A send is `in_doubt`:** the request to SendGrid was cut off mid-flight, so
-it may or may not have been delivered. It is NOT retried automatically
+**A send is `in_doubt`:** the request to SendGrid was cut off mid-flight or
+SendGrid answered with a 5xx, so it may or may not have been delivered. A
+re-run also reports `in_doubt` (not `already_sent`) for any send whose
+earlier attempt never finished — e.g. the worker was restarted mid-send. It is NOT retried automatically
 (that could double-send). Check SendGrid's activity feed; if it did not go
 out, delete its row from `email_sends` (status `sending`) and re-run.
+
+**"sent, but recording it failed"** (or "posted, but …"): the email or note
+went out, but the database write after it failed. Nothing to resend — the
+claim is kept so a re-run never sends it twice (that re-run will show it as
+`in_doubt`). Fix the database problem; if you want the record tidy, set that
+`email_sends` / `karbon_notes` row's status to `sent` / `posted`.
 
 **Karbon errors.** 429 and 5xx responses are retried with backoff
 (honouring `Retry-After`); a 4xx (bad credentials, no permission) fails the
@@ -122,8 +131,8 @@ note — nothing to configure.
 Governance type, or doesn't exist. Fix it in Karbon (or the Recipients tab)
 and re-run the job; nothing was posted.
 
-**"in_doubt":** the post to Karbon was cut off mid-flight, so the note may or
-may not exist. It is not retried (notes can't be deleted through the API, so a
+**"in_doubt":** the post to Karbon was cut off mid-flight (or an earlier
+attempt never finished), so the note may or may not exist. It is not retried (notes can't be deleted through the API, so a
 retry could leave a duplicate forever). Check the client's timeline in Karbon;
 if it isn't there, delete its row from `karbon_notes` (status `posting`) and
 re-run.

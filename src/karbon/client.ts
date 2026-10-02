@@ -82,7 +82,9 @@ export function liveTransport(bearer: string, accessKey: string): KarbonTranspor
       );
     }
     if (res.status === 429) {
-      const retry = Number(res.headers.get('retry-after'));
+      // A missing header must mean "use backoff", not Number(null) === 0 (no wait).
+      const header = res.headers.get('retry-after')?.trim();
+      const retry = header ? Number(header) : NaN;
       throw new KarbonUnavailableError(
         'Karbon responded HTTP 429',
         Number.isFinite(retry) && retry >= 0 ? retry : undefined,

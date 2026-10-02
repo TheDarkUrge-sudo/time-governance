@@ -107,7 +107,7 @@ describe('email actions', () => {
       [
         'Hi Jordan,',
         '',
-        'I only see 6.5 hours for the week of Sep 21 in Karbon. Can you enter the rest by Thursday?',
+        'I only see 6.5 hours of work for the week of Sep 21 in Karbon. Can you enter the rest by Thursday?',
         'Also, a few of your time entries for the week of Sep 21 need a fix in Karbon:',
         '',
         'Non-billable client time without a clear description — please add what the time was for:',
@@ -228,5 +228,50 @@ describe('"Open timesheet" links', () => {
       expect(html).not.toContain('Open timesheet');
       expect(html).not.toContain('karbonhq.com');
     }
+  });
+});
+
+describe('draft details', () => {
+  it('counts only entries in "+N more" and never ends on a bare heading', () => {
+    const long = (i: number) => `- Tue Sep 22 · Client ${i} · 1.0 h · ${'x'.repeat(120)}`;
+    const details = [
+      'Billable time on the internal HFA client:',
+      long(1),
+      long(2),
+      '',
+      "Time on a client's Ad Hoc work item:",
+      ...Array.from({ length: 12 }, (_, i) => long(10 + i)),
+    ];
+    const href = mailtoHref({
+      to: ['jo@hfacpas.com'],
+      subject: 's',
+      opening: 'Hi',
+      details,
+      closing: 'Thanks,',
+    });
+    expect(href.length).toBeLessThanOrEqual(MAX_MAILTO_LENGTH);
+    const body = open(href).body!.replace(/\r\n/g, '\n');
+    const kept = (body.match(/^- /gm) ?? []).length;
+    expect(body).toContain(`(+${14 - kept} more — see Karbon)`);
+    const before = body.split('\n(+')[0]!.split('\n');
+    expect(before[before.length - 1]).toMatch(/^- /);
+  });
+
+  it('a minimal-entry draft quotes worked hours, with PTO/sick on top', () => {
+    const d = csaDraft({
+      week,
+      csaName: null,
+      person: {
+        member: member({ name: 'Jordan Lee' }),
+        karbonUserId: 'k',
+        minutes: { ...none, total: 1080, pto: 960 },
+        minimalThresholdMinutes: 720,
+        flags: [{ kind: 'minimal_entry', minutes: 120, detail: '2.0 h logged' }],
+        timesheetKey: null,
+      },
+    });
+    expect(d.opening).toContain(
+      'I only see 2.0 hours of work for the week of Sep 21 in Karbon (plus 16.0 hours of PTO/sick).',
+    );
   });
 });

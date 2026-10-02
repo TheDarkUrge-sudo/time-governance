@@ -313,6 +313,38 @@ describe('Karbon governance notes', () => {
     expect(state.posted).toEqual([]);
   });
 
+  it('a note Karbon created is never re-posted, even if recording it fails', async () => {
+    const mark = store.markNotePosted.bind(store);
+    store.markNotePosted = () => Promise.reject(new Error('connection lost'));
+    await runTuesday(deps(), WEEK);
+    const posted = state.posted.length;
+    expect(posted).toBeGreaterThan(0);
+
+    store.markNotePosted = mark;
+    const again = await runTuesday(deps(), WEEK);
+    expect(state.posted).toHaveLength(posted); // nothing posted twice
+    expect(JSON.stringify(again.admin)).toContain('earlier attempt was interrupted');
+  });
+
+  it('a failed governance-client lookup is retried by the next note, not cached', async () => {
+    let calls = 0;
+    const karbon = {
+      findClientByUserDefinedId: () =>
+        ++calls === 1
+          ? Promise.reject(new KarbonUnavailableError('Karbon responded HTTP 503'))
+          : Promise.resolve({
+              clientKey: 'G1',
+              name: 'Time Governance – CSA-1',
+              type: 'Organization' as const,
+              restrictionLevel: 'Hidden',
+              clientType: 'Governance',
+            }),
+    } as unknown as KarbonClient;
+    const clients = new GovernanceClients(karbon, 'Governance');
+    await expect(clients.resolve('TG-CSA1')).rejects.toThrow('503');
+    await expect(clients.resolve('TG-CSA1')).resolves.toMatchObject({ ok: true });
+  });
+
   it('dry run: note previews, nothing posted, and a misconfigured client still refused', async () => {
     const outDir = await mkdtemp(path.join(tmpdir(), 'tg-notes-'));
     const d = deps({ dryRun: true, outDir });

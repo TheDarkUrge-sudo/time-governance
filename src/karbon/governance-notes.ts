@@ -98,6 +98,8 @@ export class GovernanceClients {
     if (!hit) {
       hit = this.lookup(clientId);
       this.cache.set(clientId, hit);
+      // A transient Karbon failure must not fail every later note to this client.
+      void hit.catch(() => this.cache.delete(clientId));
     }
     return hit;
   }
@@ -168,18 +170,32 @@ export async function postGovernanceNote(
   const bodyHtml = shadow
     ? `<p><em>Shadow mode — in live mode this note goes to governance client ${escapeHtml(d.clientId)}${d.assignee ? `, assigned to ${escapeHtml(d.assignee)}` : ''}.</em></p>${d.bodyHtml}`
     : d.bodyHtml;
-  const claim = await deps.store.claimNote({
+  const key = {
     kind: d.kind,
     period: d.period,
     subjectKey: d.subjectKey,
-    mode: shadow ? 'shadow' : 'live',
+    mode: shadow ? ('shadow' as const) : ('live' as const),
+  };
+  const claim = await deps.store.claimNote({
+    ...key,
     clientKey: resolved.target.clientKey,
     subject,
   });
-  if (claim === null) return { ...base, outcome: 'already_posted' };
+  if (claim === null) {
+    // A claim still 'posting' is an earlier attempt that never finished — not a posted note.
+    return (await deps.store.noteClaimStatus(key)) === 'posting'
+      ? {
+          ...base,
+          outcome: 'in_doubt',
+          detail:
+            'an earlier attempt was interrupted — check the client timeline in Karbon; if the note is not there, delete its karbon_notes row (status posting) and re-run',
+        }
+      : { ...base, outcome: 'already_posted' };
+  }
 
+  let noteId: string;
   try {
-    const noteId = await deps.karbon.postNote({
+    noteId = await deps.karbon.postNote({
       subject,
       bodyHtml,
       authorEmail: ctx.author,
@@ -187,8 +203,6 @@ export async function postGovernanceNote(
       dueDate: d.dueDate,
       timeline: { entityType: resolved.target.type, entityKey: resolved.target.clientKey },
     });
-    await deps.store.markNotePosted(claim, noteId);
-    return { ...base, outcome: 'posted' };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (err instanceof KarbonWriteUncertainError) {
@@ -205,6 +219,17 @@ export async function postGovernanceNote(
           : message,
     };
   }
+  // The note exists in Karbon now. Recording it is bookkeeping: if that write
+  // fails, keep the claim (never release it — a re-run would post a duplicate
+  // that can't be deleted) and report the note as posted.
+  try {
+    await deps.store.markNotePosted(claim, noteId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ kind: d.kind, subject, noteId, err: message }, 'note posted but not recorded');
+    return { ...base, outcome: 'posted', detail: `posted, but recording it failed: ${message}` };
+  }
+  return { ...base, outcome: 'posted' };
 }
 
 async function writeNotePreview(outDir: string, d: NoteDelivery): Promise<void> {

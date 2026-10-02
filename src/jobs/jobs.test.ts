@@ -237,6 +237,23 @@ describe('jobs (PGlite + fake Karbon + fake SendGrid)', () => {
     expect(sent.map((m) => m.to)).toEqual([['ccsa@hfacpas.com']]);
   });
 
+  it('an email SendGrid accepted is never released, and an unfinished claim is in doubt on re-run', async () => {
+    const state = { entries: tuesdayEntries() };
+    const markSent = store.markSent.bind(store);
+    store.markSent = () => Promise.reject(new Error('connection lost'));
+    const first = await runTuesday(deps(state, 'live'), WEEK);
+    expect(first.deliveries.map((d) => d.outcome)).toEqual(['sent', 'sent', 'sent']);
+    expect(first.deliveries[0]!.error).toContain('sent, but recording it failed');
+
+    store.markSent = markSent;
+    sent = [];
+    const second = await runTuesday(deps(state, 'live'), WEEK);
+    expect(sent).toEqual([]); // nothing goes out twice
+    // The claims never reached 'sent', so the re-run doesn't claim they did.
+    expect(second.deliveries.map((d) => d.outcome)).toEqual(['in_doubt', 'in_doubt', 'in_doubt']);
+    expect(second.deliveries[0]!.error).toContain('earlier attempt was interrupted');
+  });
+
   it('mode off sends nothing at all', async () => {
     const result = await runTuesday(deps({ entries: tuesdayEntries() }, 'off'), WEEK);
     expect(sent).toEqual([]);

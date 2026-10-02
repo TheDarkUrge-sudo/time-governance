@@ -20,7 +20,7 @@ import { runMonthly } from './jobs/monthly';
 import { runTuesday } from './jobs/tuesday';
 import { karbonConfigured } from './karbon/client';
 import { logger } from './logger';
-import { liveRuntime } from './runtime';
+import { liveRuntime, type Runtime } from './runtime';
 
 type Job = 'tuesday' | 'friday' | 'monthly';
 
@@ -38,8 +38,12 @@ async function run(job: Job): Promise<void> {
       logger.error({ job }, 'Karbon is not configured — job skipped');
       return;
     }
-    const rt = await liveRuntime({ dryRun: false, outDir: null });
+    // Everything inside the try: a fire that can't even set up (Karbon down,
+    // a database blip, a config error) is logged, never an unhandled rejection
+    // that takes the worker down with it.
+    let rt: Runtime | null = null;
     try {
+      rt = await liveRuntime({ dryRun: false, outDir: null });
       let result: JobResult;
       if (job === 'tuesday') result = await runTuesday(rt.deps, previousWeek(today));
       else if (job === 'friday') result = await runFriday(rt.deps, previousWeek(today));
@@ -48,7 +52,7 @@ async function run(job: Job): Promise<void> {
     } catch (err) {
       logger.error({ job, err }, 'job failed');
     } finally {
-      await rt.close();
+      await rt?.close().catch((err: unknown) => logger.error({ job, err }, 'closing failed'));
     }
   })();
   running = work;

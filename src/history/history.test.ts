@@ -77,6 +77,7 @@ describe('history', () => {
       ['2025-11-03', false, 10],
     ]);
     expect(lines[0]!.flags).toEqual(['Minimal entry']);
+    expect(escalationTotals(esc, '2026-10-01', 2).recent).toBe(2); // Sep 14, Sep 21
     expect(escalationTotals(esc, '2026-10-01', 4)).toEqual({
       recent: 3, // the last 4 full weeks as of Oct 1: Aug 31, Sep 7, Sep 14, Sep 21
       thisYear: 3,

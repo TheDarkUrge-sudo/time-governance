@@ -83,10 +83,13 @@ export function escalationTotals(
   today: string,
   lookbackWeeks: number,
 ): { recent: number; thisYear: number; allTime: number; since: string | null } {
-  const recentFrom = addDays(mondayOf(today), -7 * lookbackWeeks);
+  // The last `lookbackWeeks` completed weeks — the same span as the Friday
+  // email's "N of the last 4" (Friday escalates the week before).
+  const thisWeek = mondayOf(today);
+  const recentFrom = addDays(thisWeek, -7 * lookbackWeeks);
   const yearFrom = `${today.slice(0, 4)}-01-01`;
   return {
-    recent: escalated.filter((e) => e.weekStart >= recentFrom).length,
+    recent: escalated.filter((e) => e.weekStart >= recentFrom && e.weekStart < thisWeek).length,
     thisYear: escalated.filter((e) => e.weekStart >= yearFrom).length,
     allTime: escalated.length,
     since: escalated[0]?.weekStart ?? null,

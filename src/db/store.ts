@@ -201,17 +201,11 @@ export class Store {
   }
 
   /** Escalations per email in the (lookback − 1) weeks before `weekStart`. */
-  async priorEscalationCounts(
-    weekStart: string,
-    lookbackWeeks: number,
-  ): Promise<Map<string, number>> {
-    const from = addDays(weekStart, -7 * Math.max(0, lookbackWeeks - 1));
-    const rows = await this.db
-      .select({ email: escalations.email, n: sql<number>`count(*)::int` })
-      .from(escalations)
-      .where(and(gte(escalations.weekStart, from), lt(escalations.weekStart, weekStart)))
-      .groupBy(escalations.email);
-    return new Map(rows.map((r) => [r.email, Number(r.n)]));
+  priorEscalationCounts(weekStart: string, lookbackWeeks: number): Promise<Map<string, number>> {
+    return this.escalationCountsBetween(
+      addDays(weekStart, -7 * Math.max(0, lookbackWeeks - 1)),
+      weekStart,
+    );
   }
 
   /** The first week a Friday run completed — where "weeks flagged" history begins. */
@@ -311,6 +305,28 @@ export class Store {
     return rows[0]?.id ?? null;
   }
 
+  /** The status of the claim on this send ('sending' = an attempt that never finished), or null. */
+  async sendClaimStatus(c: {
+    kind: string;
+    period: string;
+    recipient: string;
+    mode: SendMode;
+  }): Promise<string | null> {
+    const rows = await this.db
+      .select({ status: emailSends.status })
+      .from(emailSends)
+      .where(
+        and(
+          eq(emailSends.kind, c.kind),
+          eq(emailSends.period, c.period),
+          eq(emailSends.recipient, c.recipient),
+          eq(emailSends.mode, c.mode),
+        ),
+      )
+      .limit(1);
+    return rows[0]?.status ?? null;
+  }
+
   async markSent(id: number, messageId: string): Promise<void> {
     await this.db
       .update(emailSends)
@@ -338,6 +354,28 @@ export class Store {
       .onConflictDoNothing()
       .returning({ id: karbonNotes.id });
     return rows[0]?.id ?? null;
+  }
+
+  /** The status of the claim on this note ('posting' = an attempt that never finished), or null. */
+  async noteClaimStatus(c: {
+    kind: string;
+    period: string;
+    subjectKey: string;
+    mode: SendMode;
+  }): Promise<string | null> {
+    const rows = await this.db
+      .select({ status: karbonNotes.status })
+      .from(karbonNotes)
+      .where(
+        and(
+          eq(karbonNotes.kind, c.kind),
+          eq(karbonNotes.period, c.period),
+          eq(karbonNotes.subjectKey, c.subjectKey),
+          eq(karbonNotes.mode, c.mode),
+        ),
+      )
+      .limit(1);
+    return rows[0]?.status ?? null;
   }
 
   async markNotePosted(id: number, noteId: string): Promise<void> {

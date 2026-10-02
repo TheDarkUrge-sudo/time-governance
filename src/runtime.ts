@@ -29,62 +29,70 @@ export async function liveRuntime(opts: {
     store = new Store(conn.db);
     close = conn.close;
   }
-  const roster = opts.roster ?? (await store!.loadRoster());
-  const sendable = !opts.dryRun && env.TG_MODE !== 'off';
-  if (!opts.dryRun && env.TG_KARBON_NOTES !== 'off') {
-    if (!env.KARBON_NOTE_AUTHOR) {
+  try {
+    const roster = opts.roster ?? (await store!.loadRoster());
+    const sendable = !opts.dryRun && env.TG_MODE !== 'off';
+    if (!opts.dryRun && env.TG_KARBON_NOTES !== 'off') {
+      if (!env.KARBON_NOTE_AUTHOR) {
+        throw new Error(
+          'TG_KARBON_NOTES is on but KARBON_NOTE_AUTHOR (the Karbon user notes are posted as) is not set.',
+        );
+      }
+      if (env.TG_KARBON_NOTES === 'shadow' && !env.KARBON_NOTES_SHADOW_CLIENT_ID) {
+        throw new Error(
+          'TG_KARBON_NOTES is "shadow" but KARBON_NOTES_SHADOW_CLIENT_ID is not set.',
+        );
+      }
+    }
+    if (sendable && env.TG_MODE === 'shadow' && !env.TG_SHADOW_TO) {
+      throw new Error('TG_MODE is "shadow" but TG_SHADOW_TO is not set — nowhere to send.');
+    }
+    if (sendable && !emailConfigured()) {
       throw new Error(
-        'TG_KARBON_NOTES is on but KARBON_NOTE_AUTHOR (the Karbon user notes are posted as) is not set.',
+        `TG_MODE is "${env.TG_MODE}" but email is not configured (SENDGRID_API_KEY, SENDGRID_FROM_EMAIL).`,
       );
     }
-    if (env.TG_KARBON_NOTES === 'shadow' && !env.KARBON_NOTES_SHADOW_CLIENT_ID) {
-      throw new Error('TG_KARBON_NOTES is "shadow" but KARBON_NOTES_SHADOW_CLIENT_ID is not set.');
-    }
-  }
-  if (sendable && env.TG_MODE === 'shadow' && !env.TG_SHADOW_TO) {
-    throw new Error('TG_MODE is "shadow" but TG_SHADOW_TO is not set — nowhere to send.');
-  }
-  if (sendable && !emailConfigured()) {
-    throw new Error(
-      `TG_MODE is "${env.TG_MODE}" but email is not configured (SENDGRID_API_KEY, SENDGRID_FROM_EMAIL).`,
-    );
-  }
-  const internal = await resolveInternalClients(
-    karbon,
-    env.KARBON_INTERNAL_CLIENT_IDS,
-    env.KARBON_INTERNAL_CLIENT_KEYS,
-  );
-  return {
-    deps: {
+    const internal = await resolveInternalClients(
       karbon,
-      store: opts.dryRun ? null : store,
-      roster,
-      policy: policyFromEnv(),
-      delivery: {
-        mode: env.TG_MODE,
-        shadowTo: env.TG_SHADOW_TO ?? null,
+      env.KARBON_INTERNAL_CLIENT_IDS,
+      env.KARBON_INTERNAL_CLIENT_KEYS,
+    );
+    return {
+      deps: {
+        karbon,
         store: opts.dryRun ? null : store,
-        transport: sendable ? sendgridTransport() : null,
-        dryRun: opts.dryRun,
-        outDir: opts.outDir,
+        roster,
+        policy: policyFromEnv(),
+        delivery: {
+          mode: env.TG_MODE,
+          shadowTo: env.TG_SHADOW_TO ?? null,
+          store: opts.dryRun ? null : store,
+          transport: sendable ? sendgridTransport() : null,
+          dryRun: opts.dryRun,
+          outDir: opts.outDir,
+        },
+        adminTo: env.TG_ADMIN_TO,
+        internalClientKeys: internal.keys,
+        adHocTitle: env.KARBON_AD_HOC_TITLE,
+        timesheetUrlTemplate: env.KARBON_TIMESHEET_URL ?? null,
+        retentionDays: env.HISTORY_RETENTION_DAYS,
+        setupNotes: internal.notes,
+        notes: {
+          mode: env.TG_KARBON_NOTES,
+          author: env.KARBON_NOTE_AUTHOR ?? null,
+          requiredClientType: env.KARBON_GOVERNANCE_CLIENT_TYPE || null,
+          shadowClientId: env.KARBON_NOTES_SHADOW_CLIENT_ID ?? null,
+          shadowAssignee: env.TG_SHADOW_TO ?? null,
+          dryRun: opts.dryRun,
+          outDir: opts.outDir,
+        },
+        governance: new GovernanceClients(karbon, env.KARBON_GOVERNANCE_CLIENT_TYPE || null),
       },
-      adminTo: env.TG_ADMIN_TO,
-      internalClientKeys: internal.keys,
-      adHocTitle: env.KARBON_AD_HOC_TITLE,
-      timesheetUrlTemplate: env.KARBON_TIMESHEET_URL ?? null,
-      retentionDays: env.HISTORY_RETENTION_DAYS,
-      setupNotes: internal.notes,
-      notes: {
-        mode: env.TG_KARBON_NOTES,
-        author: env.KARBON_NOTE_AUTHOR ?? null,
-        requiredClientType: env.KARBON_GOVERNANCE_CLIENT_TYPE || null,
-        shadowClientId: env.KARBON_NOTES_SHADOW_CLIENT_ID ?? null,
-        shadowAssignee: env.TG_SHADOW_TO ?? null,
-        dryRun: opts.dryRun,
-        outDir: opts.outDir,
-      },
-      governance: new GovernanceClients(karbon, env.KARBON_GOVERNANCE_CLIENT_TYPE || null),
-    },
-    close,
-  };
+      close,
+    };
+  } catch (err) {
+    // Setup failed after the pool opened: close it, or each failed fire leaks one.
+    await close().catch(() => undefined);
+    throw err;
+  }
 }
