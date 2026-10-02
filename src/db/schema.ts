@@ -38,10 +38,11 @@ export const rosterMembers = pgTable('roster_members', {
 
 export const recipients = pgTable('recipients', {
   id: serial('id').primaryKey(),
-  role: text('role', { enum: ['csa', 'partner'] }).notNull(),
+  role: text('role', { enum: ['csa', 'partner', 'manager'] }).notNull(),
   slot: text('slot'),
   name: text('name'),
   email: text('email').notNull(),
+  karbonClientId: text('karbon_client_id'),
 });
 
 export const taskTypes = pgTable('task_types', {
@@ -145,3 +146,28 @@ export const jobRuns = pgTable('job_runs', {
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
 });
+
+/**
+ * Every governance note posted to Karbon, claimed before posting (same posture
+ * as email_sends: a re-run never posts twice). Karbon notes cannot be deleted
+ * through the API, so this table is the only record of what the app posted.
+ * `subjectKey` is the employee's email for per-person notes, or the recipient
+ * key ("partners", "manager:…") for summary notes.
+ */
+export const karbonNotes = pgTable(
+  'karbon_notes',
+  {
+    id: serial('id').primaryKey(),
+    kind: text('kind').notNull(),
+    period: text('period').notNull(),
+    subjectKey: text('subject_key').notNull(),
+    mode: text('mode', { enum: ['shadow', 'live'] }).notNull(),
+    clientKey: text('client_key').notNull(),
+    subject: text('subject').notNull(),
+    status: text('status', { enum: ['posting', 'posted'] }).notNull(),
+    noteId: text('note_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('karbon_notes_once').on(t.kind, t.period, t.subjectKey, t.mode)],
+);
+
