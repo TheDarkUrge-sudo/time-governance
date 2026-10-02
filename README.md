@@ -92,6 +92,10 @@ All thresholds are environment settings (see `.env.example`).
 
 ## Set up
 
+The full ordered checklist — credentials, dry runs, test emails, shadow trial,
+go-live, with the gate for each step — is **[docs/go-live.md](docs/go-live.md)**.
+In short:
+
 1. **Host and database** — Azure: follow [docs/azure.md](docs/azure.md).
    Replit: a project from this repo with the PostgreSQL module (sets
    `DATABASE_URL`), deployed as a Reserved VM → Background Worker.
