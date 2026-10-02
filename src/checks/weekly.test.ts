@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_POLICY } from '../policy';
 import { entry, member, roster, userFor } from '../test-fixtures';
-import { minimalThresholdMinutes, runWeeklyChecks, type WeeklyInput } from './weekly';
+import {
+  mainTimesheet,
+  minimalThresholdMinutes,
+  runWeeklyChecks,
+  type WeeklyInput,
+} from './weekly';
 
 const WEEK = { start: '2026-09-21', end: '2026-09-27' };
 const MON = '2026-09-21';
@@ -89,6 +94,24 @@ describe('weekly checks', () => {
       },
     ]);
     expect(flags['Morgan Okafor']).toEqual([]);
+  });
+
+  it('keeps the timesheet holding most of the week, for the "Open timesheet" link', () => {
+    const review = runWeeklyChecks(
+      input({
+        roster: roster([alvarez, chen]),
+        users: [u1, u2],
+        entries: [
+          entry({ userKey: u2.id, date: MON, minutes: 240, timesheetKey: 'TSmain' }),
+          entry({ userKey: u2.id, date: MON, minutes: 60, timesheetKey: 'TSother' }),
+          entry({ userKey: u2.id, date: MON, minutes: 120, timesheetKey: 'TSmain' }),
+        ],
+      }),
+    );
+    const key = Object.fromEntries(review.people.map((p) => [p.member.name, p.timesheetKey]));
+    expect(key['Riley Chen']).toBe('TSmain');
+    expect(key['Jordan Alvarez']).toBeNull(); // no time, no key
+    expect(mainTimesheet([entry({ userKey: 'u', date: MON, timesheetKey: null })])).toBeNull();
   });
 
   it('does not count PTO as worked time, but lowers the bar for it', () => {

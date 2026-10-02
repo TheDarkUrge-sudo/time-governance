@@ -21,6 +21,7 @@ describe('emails', () => {
           karbonUserId: 'k',
           minutes: { total: 0, billable: 0, nonBillable: 0, pto: 0, sick: 0, unclassified: 0 },
           minimalThresholdMinutes: 1200,
+          timesheetKey: null,
           flags: [
             {
               kind: 'internal_only_role',
@@ -61,6 +62,7 @@ describe('emails', () => {
       karbonUserId: name,
       minutes: { total: 0, billable: 0, nonBillable: 0, pto: 0, sick: 0, unclassified: 0 },
       minimalThresholdMinutes: 1200,
+      timesheetKey: null,
       flags: [{ kind, minutes: 0, detail: kind }],
     });
     const email = renderCsaWeekly({
@@ -127,6 +129,7 @@ describe('emails', () => {
             unclassified: 0,
           },
           minimalThresholdMinutes: 1200,
+          timesheetKey: null,
           flags: [{ kind: 'nonbillable_unexplained', minutes: 427, detail: '7 entries', entries }],
         },
       ],

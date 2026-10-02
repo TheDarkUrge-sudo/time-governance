@@ -43,6 +43,7 @@ import { runMonthly } from './jobs/monthly';
 import { runTuesday } from './jobs/tuesday';
 import { KarbonClient, karbonConfigured } from './karbon/client';
 import { resolveInternalClients } from './karbon/internal-client';
+import { timesheetUrl } from './karbon/links';
 import { describeDiff, diffRoster } from './roster/diff';
 import { parseRosterWorkbook } from './roster/workbook';
 import { liveRuntime } from './runtime';
@@ -240,6 +241,21 @@ async function karbonCheck(): Promise<number> {
     `Internal client:      ${internal.resolved.join('; ') || 'NOT FOUND'}${internal.keys.size ? ` — time logged to it in the last 7 days: ${seen.length > 0 ? 'yes' : 'none'}` : ''}`,
     ...internal.notes.map((n) => `  ! ${n}`),
   );
+  // "Open timesheet" links: show one real key, and the link built from it, so
+  // the pattern can be confirmed by opening it before anyone relies on it.
+  const sample = entries.find((e) => e.timesheetKey);
+  if (!sample) {
+    say('Timesheet keys:       none on the last 7 days of entries — links cannot be built');
+  } else {
+    const who = users.find((u) => u.id === sample.userKey)?.name ?? sample.userKey;
+    const url = timesheetUrl(env.KARBON_TIMESHEET_URL ?? null, sample.timesheetKey);
+    say(
+      `Timesheet key:        ${sample.timesheetKey} (${who}, ${sample.date})`,
+      url
+        ? `Timesheet link:       ${url}\n                      open it — it should show that person's timesheet for that week`
+        : '                      set KARBON_TIMESHEET_URL to add "Open timesheet" links',
+    );
+  }
   if (users.length > 0) {
     const capacity = await karbon.getUserCapacityMinutes(users[0]!.id);
     say(

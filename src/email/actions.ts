@@ -65,7 +65,12 @@ export function mailtoHref(d: Draft): string {
 
 /** A small outlined button — neutral, so it never competes with the brand bar or a status pill. */
 export function actionButton(label: string, draft: Draft): string {
-  return `<a href="${escapeHtml(mailtoHref(draft))}" style="${FONT};display:inline-block;margin:6px 6px 0 0;padding:4px 10px;border:1px solid ${CHARCOAL};border-radius:4px;color:${CHARCOAL};font-size:11px;font-weight:bold;text-decoration:none;white-space:nowrap;">${escapeHtml(label)}</a>`;
+  return linkButton(label, mailtoHref(draft));
+}
+
+/** The same button for any link (e.g. "Open timesheet" into Karbon). */
+export function linkButton(label: string, href: string): string {
+  return `<a href="${escapeHtml(href)}" style="${FONT};display:inline-block;margin:6px 6px 0 0;padding:4px 10px;border:1px solid ${CHARCOAL};border-radius:4px;color:${CHARCOAL};font-size:11px;font-weight:bold;text-decoration:none;white-space:nowrap;">${escapeHtml(label)}</a>`;
 }
 
 /** "Jordan" from "Jordan Lee" or "Lee, Jordan". */

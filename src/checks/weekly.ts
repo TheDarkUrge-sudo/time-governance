@@ -74,6 +74,11 @@ export interface PersonWeek {
   /** Null when the missing/minimal check did not apply (hired mid-week, a full week off). */
   minimalThresholdMinutes: number | null;
   flags: Flag[];
+  /**
+   * The Karbon timesheet holding most of this week's time — the one to open.
+   * Null with no time logged (the API only exposes the key through entries).
+   */
+  timesheetKey: string | null;
 }
 
 export interface AdHocUsage {
@@ -348,6 +353,7 @@ export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
       minutes,
       minimalThresholdMinutes: threshold,
       flags,
+      timesheetKey: mainTimesheet(entries),
     });
   }
 
@@ -359,6 +365,24 @@ export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
     unclassifiedTaskTypes: [...unclassified.values()].sort((a, b) => b.minutes - a.minutes),
     adHocUsage,
   };
+}
+
+/**
+ * The timesheet with the most minutes in the week. A firm with weekly
+ * Monday–Sunday timesheets has exactly one; a different period start can split
+ * the week across two, and the larger one is the one worth opening.
+ */
+export function mainTimesheet(entries: readonly TimeEntry[]): string | null {
+  const byKey = new Map<string, number>();
+  for (const e of entries) {
+    if (e.timesheetKey) byKey.set(e.timesheetKey, (byKey.get(e.timesheetKey) ?? 0) + e.minutes);
+  }
+  let best: string | null = null;
+  let bestMinutes = -1;
+  for (const [key, m] of byKey) {
+    if (m > bestMinutes) [best, bestMinutes] = [key, m];
+  }
+  return best;
 }
 
 function sum(entries: readonly TimeEntry[]): number {

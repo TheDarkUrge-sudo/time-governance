@@ -33,6 +33,7 @@ export function entry(over: Partial<TimeEntry> & { userKey: string; date: string
     roleName: 'Staff',
     taskTypeName: 'Audit Fieldwork',
     description: 'Testing controls for year-end',
+    timesheetKey: null,
     ...over,
   };
 }

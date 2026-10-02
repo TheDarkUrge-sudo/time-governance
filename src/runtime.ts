@@ -71,6 +71,7 @@ export async function liveRuntime(opts: {
       adminTo: env.TG_ADMIN_TO,
       internalClientKeys: internal.keys,
       adHocTitle: env.KARBON_AD_HOC_TITLE,
+      timesheetUrlTemplate: env.KARBON_TIMESHEET_URL ?? null,
       retentionDays: env.HISTORY_RETENTION_DAYS,
       setupNotes: internal.notes,
       notes: {

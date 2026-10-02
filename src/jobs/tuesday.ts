@@ -5,6 +5,7 @@ import type { DateRange, RosterMember } from '../domain';
 import { unclassifiedLine } from '../email/admin-summary';
 import { renderCsaWeekly } from '../email/csa-weekly';
 import type { NoteResult } from '../karbon/governance-notes';
+import { timesheetUrl } from '../karbon/links';
 import { employeeReviewNote, reviewDueDate } from '../karbon/note-bodies';
 import {
   finishWithAdminSummary,
@@ -69,7 +70,13 @@ export async function runTuesday(deps: JobDeps, week: DateRange): Promise<JobRes
           period: week.start,
           recipientKey: `csa:${slot}`,
           to: who.emails,
-          content: renderCsaWeekly({ week, csaName: who.name, people, unmatched }),
+          content: renderCsaWeekly({
+            week,
+            csaName: who.name,
+            people,
+            unmatched,
+            timesheetUrlTemplate: deps.timesheetUrlTemplate ?? null,
+          }),
         }),
       );
     }
@@ -87,7 +94,11 @@ export async function runTuesday(deps: JobDeps, week: DateRange): Promise<JobRes
             (r) => r.role === 'csa' && r.slot === slot && r.karbonClientId,
           )?.karbonClientId ?? null;
         for (const p of review.people.filter((x) => x.member.csaSlot === slot && x.flags.length)) {
-          const note = employeeReviewNote(p, week);
+          const note = employeeReviewNote(
+            p,
+            week,
+            timesheetUrl(deps.timesheetUrlTemplate ?? null, p.timesheetKey),
+          );
           noteResults.push(
             await postNote(deps, {
               kind: 'employee_review',

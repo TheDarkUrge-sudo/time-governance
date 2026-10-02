@@ -130,6 +130,7 @@ const rawTimeEntry = z.object({
   RoleName: z.string().nullish(),
   TaskTypeName: z.string().nullish(),
   Description: z.string().nullish(),
+  TimesheetKey: z.string().nullish(),
 });
 
 const rawWorkItem = z.object({
@@ -335,6 +336,7 @@ export class KarbonClient {
         roleName: r.RoleName ?? null,
         taskTypeName: r.TaskTypeName ?? null,
         description: r.Description ?? null,
+        timesheetKey: r.TimesheetKey || null,
       });
     }
     return out;

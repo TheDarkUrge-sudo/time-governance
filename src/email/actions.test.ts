@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { employeeReviewNote } from '../karbon/note-bodies';
 import { member } from '../test-fixtures';
 import { actionButton, firstName, mailtoHref, MAX_MAILTO_LENGTH } from './actions';
-import { csaDraft } from './csa-weekly';
+import { csaDraft, renderCsaWeekly } from './csa-weekly';
 import { managerStaffDraft } from './manager-monthly';
 import { partnerEmployeeDraft, partnerManagerDraft } from './partner-escalation';
 
@@ -78,6 +79,7 @@ describe('email actions', () => {
         karbonUserId: 'k',
         minutes: { ...none, total: 390 },
         minimalThresholdMinutes: 1200,
+        timesheetKey: null,
         flags: [
           { kind: 'minimal_entry', minutes: 390, detail: '6.5 h logged' },
           {
@@ -168,5 +170,63 @@ describe('email actions', () => {
       'Your billable utilization for September was 62% against a target of 75%, down 9 from August.',
     );
     expect(d.closing).toBe('Thanks,\nDana');
+  });
+});
+
+describe('"Open timesheet" links', () => {
+  const pattern = 'https://app2.karbonhq.com/AbCdEf123456/timesheet/{key}';
+  const person = (timesheetKey: string | null) => ({
+    member: member({ name: 'Jordan Lee' }),
+    karbonUserId: 'k',
+    minutes: { ...none, total: 390 },
+    minimalThresholdMinutes: 1200,
+    flags: [{ kind: 'minimal_entry' as const, minutes: 390, detail: '6.5 h logged' }],
+    timesheetKey,
+  });
+
+  it('adds the button and puts the link in the draft, when set up', () => {
+    const email = renderCsaWeekly({
+      week,
+      csaName: null,
+      unmatched: [],
+      people: [person('4bLnlnsHm4pM')],
+      timesheetUrlTemplate: pattern,
+    });
+    expect(email.bodyHtml).toContain(
+      'href="https://app2.karbonhq.com/AbCdEf123456/timesheet/4bLnlnsHm4pM"',
+    );
+    expect(email.bodyHtml).toContain('>Open timesheet</a>');
+    const draft = csaDraft({
+      week,
+      csaName: null,
+      person: person('4bLnlnsHm4pM'),
+      timesheetUrl: 'https://app2.karbonhq.com/AbCdEf123456/timesheet/4bLnlnsHm4pM',
+    });
+    expect(draft.opening).toMatch(
+      /by Thursday\?\n\nYour timesheet for that week: https:\/\/app2\.karbonhq\.com\/AbCdEf123456\/timesheet\/4bLnlnsHm4pM$/,
+    );
+    const note = employeeReviewNote(
+      person('4bLnlnsHm4pM'),
+      week,
+      'https://app2.karbonhq.com/AbCdEf123456/timesheet/4bLnlnsHm4pM',
+    );
+    expect(note.bodyHtml).toContain('<p>Timesheet: <a href="https://app2.karbonhq.com/');
+  });
+
+  it('shows no button without a pattern or without a timesheet (no time logged)', () => {
+    for (const [template, key] of [
+      [null, '4bLnlnsHm4pM'],
+      [pattern, null],
+    ] as const) {
+      const html = renderCsaWeekly({
+        week,
+        csaName: null,
+        unmatched: [],
+        people: [person(key)],
+        timesheetUrlTemplate: template,
+      }).bodyHtml;
+      expect(html).not.toContain('Open timesheet');
+      expect(html).not.toContain('karbonhq.com');
+    }
   });
 });

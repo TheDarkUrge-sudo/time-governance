@@ -30,6 +30,8 @@ export interface JobDeps {
   /** Karbon governance notes (mode off unless TG_KARBON_NOTES is set). */
   notes: NotesContext;
   governance: GovernanceClients | null;
+  /** KARBON_TIMESHEET_URL — the pattern for "Open timesheet" links; null = no links. */
+  timesheetUrlTemplate?: string | null;
 }
 
 /** Posts one governance note with this run's dependencies. */

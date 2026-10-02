@@ -82,6 +82,12 @@ client — nothing is sent until they press Send:
 - **Manager (monthly):** a note to each person under target or sharply down,
   with their numbers and an offer to talk.
 
+With `KARBON_TIMESHEET_URL` set, each flagged person with time logged also
+gets an **Open timesheet** button (CSAs are Karbon time administrators, so it
+opens straight to that week), and the employee's draft and Tuesday's Karbon
+note carry the same link. `pnpm tg karbon:check` prints a real one to click
+before relying on it.
+
 All thresholds are environment settings (see `.env.example`).
 
 ## Set up
@@ -97,19 +103,23 @@ All thresholds are environment settings (see `.env.example`).
    ([details](docs/azure.md#running-admin-commands-from-vs-code)).
 4. `pnpm tg karbon:check` — confirms the credentials can read users, time
    entries, capacity and the Ad Hoc work items.
-5. The internal client is found by its client ID, **99999** by default
+5. **"Open timesheet" links (optional)** — open any timesheet in Karbon,
+   copy the address, replace the last part (the timesheet key) with `{key}`
+   and set it as `KARBON_TIMESHEET_URL`. Re-run `karbon:check` and open the
+   link it prints.
+6. The internal client is found by its client ID, **99999** by default
    (`KARBON_INTERNAL_CLIENT_IDS`). `karbon:check` shows what it resolved to.
-6. **Fill in the roster workbook** — start from
+7. **Fill in the roster workbook** — start from
    `templates/HFA_Staff_Roster_Template.xlsx`. `pnpm tg karbon:task-types`
    lists every task type used in the last 90 days, for the Task Types tab.
-7. `pnpm tg roster:import roster.xlsx` (preview) → `… --apply` (save).
-8. **Dry run against real data** — `pnpm tg run tuesday --dry-run`. Nothing
+8. `pnpm tg roster:import roster.xlsx` (preview) → `… --apply` (save).
+9. **Dry run against real data** — `pnpm tg run tuesday --dry-run`. Nothing
    is sent or saved; the emails are written to `out/`. Compare them with
    what the CSAs found by hand.
-9. **Start the worker** (it applies migrations, then runs the schedules). It
-   starts in shadow mode: every email goes to `TG_SHADOW_TO` with a banner
-   naming the real recipients.
-10. **Go live** per [docs/operations.md](docs/operations.md#rollout): two
+10. **Start the worker** (it applies migrations, then runs the schedules). It
+    starts in shadow mode: every email goes to `TG_SHADOW_TO` with a banner
+    naming the real recipients.
+11. **Go live** per [docs/operations.md](docs/operations.md#rollout): two
     clean shadow Tuesdays, two Fridays, one month — then `TG_MODE=live`.
 
 ## Commands

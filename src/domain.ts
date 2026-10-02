@@ -68,6 +68,8 @@ export interface TimeEntry {
   roleName: string | null;
   taskTypeName: string | null;
   description: string | null;
+  /** The Karbon timesheet the entry belongs to (opens at KARBON_TIMESHEET_URL). */
+  timesheetKey: string | null;
 }
 
 export interface DateRange {

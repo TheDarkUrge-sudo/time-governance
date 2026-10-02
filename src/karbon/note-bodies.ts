@@ -13,6 +13,8 @@ export function reviewDueDate(week: DateRange): string {
 export function employeeReviewNote(
   p: PersonWeek,
   week: DateRange,
+  /** The person's timesheet in Karbon, when KARBON_TIMESHEET_URL is set. */
+  timesheetUrl: string | null = null,
 ): { subject: string; bodyHtml: string } {
   const subject = `Time review: ${p.member.name} — week of ${shortDate(week.start)}`;
   const items = p.flags
@@ -27,6 +29,11 @@ export function employeeReviewNote(
   const ask = missing
     ? 'Follow up this week and add a comment with what you hear. If they are still missing time on Friday they are escalated to the Partners, and your latest comment goes with them.'
     : 'Follow up and add a comment with the outcome (for example, “moved to the 2026 tax return job”).';
-  const bodyHtml = `<p><strong>${escapeHtml(p.member.name)}</strong> (${escapeHtml(p.member.department)}) · ${shortDate(week.start)} – ${shortDate(week.end)} · ${hours(p.minutes.total)} h logged</p><ul>${items}</ul><p>${escapeHtml(ask)}</p>`;
+  const bodyHtml = `<p><strong>${escapeHtml(p.member.name)}</strong> (${escapeHtml(p.member.department)}) · ${shortDate(week.start)} – ${shortDate(week.end)} · ${hours(p.minutes.total)} h logged</p><ul>${items}</ul>${
+    // The address is also the link text, so it stays visible if Karbon strips the tag.
+    timesheetUrl
+      ? `<p>Timesheet: <a href="${escapeHtml(timesheetUrl)}">${escapeHtml(timesheetUrl)}</a></p>`
+      : ''
+  }<p>${escapeHtml(ask)}</p>`;
   return { subject, bodyHtml };
 }

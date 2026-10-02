@@ -55,6 +55,9 @@ database is in-process PGlite with the real migrations (`src/db/test-db.ts`).
 - "Email {name}" buttons are `mailto` drafts built with `src/email/actions.ts`
   (`actionButton`, never a hand-built href) — HTML part only; the text part
   feeds the Karbon notes and carries no links.
+- Links into Karbon's web app go through `src/karbon/links.ts` (the
+  `KARBON_TIMESHEET_URL` pattern, validated; plain keys only) — never a
+  hard-coded Karbon web address.
 - Karbon notes go through `postGovernanceNote()` only: Hidden + Governance-type
   clients, checked every run (dry runs and shadow too); claimed before posting;
   never re-posted on an uncertain failure (the API cannot delete a note).

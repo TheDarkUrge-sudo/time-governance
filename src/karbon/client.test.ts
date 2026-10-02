@@ -47,6 +47,7 @@ describe('KarbonClient', () => {
           RoleName: 'Senior',
           TaskTypeName: 'Audit Fieldwork',
           Description: null,
+          TimesheetKey: '4bLnlnsHm4pM',
           HourlyRate: 150,
         },
         {
@@ -75,6 +76,7 @@ describe('KarbonClient', () => {
         roleName: 'Senior',
         taskTypeName: 'Audit Fieldwork',
         description: null,
+        timesheetKey: '4bLnlnsHm4pM',
       },
     ]);
   });

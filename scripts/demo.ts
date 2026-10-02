@@ -9,7 +9,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { datesIn, weekOf } from '../src/calendar';
+import { datesIn, mondayOf, weekOf } from '../src/calendar';
 import { Store } from '../src/db/store';
 import { testDb } from '../src/db/test-db';
 import type { Roster, RosterMember } from '../src/domain';
@@ -165,6 +165,8 @@ function e(m: RosterMember, date: string, hours: number, over: Raw = {}): Raw {
     RoleName: 'Staff',
     TaskTypeName: taskFor[m.department] ?? 'Admin',
     Description: 'Client work per engagement plan',
+    // One weekly timesheet per person, as Karbon keys them (alphanumeric).
+    TimesheetKey: `ts${karbonId(m)}${mondayOf(date)}`.replace(/[^A-Za-z0-9]/g, ''),
     ...over,
   };
 }
@@ -372,6 +374,8 @@ const deps: JobDeps = {
   adminTo: ['ops@example.com'],
   internalClientKeys: new Set([HFA]),
   adHocTitle: 'Ad Hoc',
+  // A made-up tenant key — the real pattern comes from Karbon's address bar.
+  timesheetUrlTemplate: 'https://app2.karbonhq.com/DemoTenant1/timesheet/{key}',
   retentionDays: 400,
   setupNotes: [],
   notes: {

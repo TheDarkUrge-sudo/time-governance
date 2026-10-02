@@ -10,7 +10,8 @@ import {
 } from '../checks/weekly';
 import type { DateRange, RosterMember } from '../domain';
 import { escapeHtml, hours } from '../format';
-import { actionButton, type Draft, firstName, greeting, signOff } from './actions';
+import { timesheetUrl } from '../karbon/links';
+import { actionButton, type Draft, firstName, greeting, linkButton, signOff } from './actions';
 import {
   type EmailContent,
   heading,
@@ -76,6 +77,8 @@ export function csaDraft(opts: {
   week: DateRange;
   csaName: string | null;
   person: PersonWeek;
+  /** "Open timesheet" address for this person's week, when links are set up. */
+  timesheetUrl?: string | null;
 }): Draft {
   const { person } = opts;
   const weekLabel = shortDate(opts.week.start);
@@ -106,7 +109,12 @@ export function csaDraft(opts: {
   return {
     to: [person.member.email],
     subject: `Time entry: week of ${weekLabel}`,
-    opening: [greeting(person.member.name), '', ...asks].join('\n'),
+    opening: [
+      greeting(person.member.name),
+      '',
+      ...asks,
+      ...(opts.timesheetUrl ? ['', `Your timesheet for that week: ${opts.timesheetUrl}`] : []),
+    ].join('\n'),
     details,
     closing: signOff(opts.csaName),
   };
@@ -127,6 +135,8 @@ export function renderCsaWeekly(opts: {
   people: PersonWeek[];
   /** Assigned to this CSA but with no Karbon user at their email. */
   unmatched: RosterMember[];
+  /** KARBON_TIMESHEET_URL; null or absent = no "Open timesheet" links. */
+  timesheetUrlTemplate?: string | null;
 }): EmailContent {
   const { week, people } = opts;
   const weekLabel = shortDate(week.start);
@@ -149,6 +159,18 @@ export function renderCsaWeekly(opts: {
       : `Weekly time entry review: week of ${weekLabel} — ${flagged.length} ${flagged.length === 1 ? 'flag' : 'flags'}`;
   const to = opts.csaName ? `To: ${opts.csaName}` : 'To: CSA Team';
   const range = `${shortDate(week.start)} – ${shortDate(week.end)}`;
+
+  const linkFor = (p: PersonWeek) =>
+    timesheetUrl(opts.timesheetUrlTemplate ?? null, p.timesheetKey);
+  const personButtons = (p: PersonWeek) => {
+    const url = linkFor(p);
+    return (
+      actionButton(
+        `Email ${firstName(p.member.name) ?? 'them'}`,
+        csaDraft({ week, csaName: opts.csaName, person: p, timesheetUrl: url }),
+      ) + (url ? linkButton('Open timesheet', url) : '')
+    );
+  };
 
   let html = heading(`Weekly time entry review: week of ${weekLabel}`, `${to}  |  ${range}`);
   html += tiles([
@@ -179,10 +201,7 @@ export function renderCsaWeekly(opts: {
       ],
       flagged.map(({ p, f }) => [
         // Every row of a person opens the same draft, covering all their flags.
-        `${escapeHtml(p.member.name)}<br/>${actionButton(
-          `Email ${firstName(p.member.name) ?? 'them'}`,
-          csaDraft({ week, csaName: opts.csaName, person: p }),
-        )}`,
+        `${escapeHtml(p.member.name)}<br/>${personButtons(p)}`,
         `<span style="color:${MUTED};">${escapeHtml(p.member.department)}</span>`,
         `${pill(FLAG_LABELS[f.kind], TONE[f.kind])}<div style="color:${MUTED};font-size:11px;margin-top:4px;">${escapeHtml(f.detail)}</div>${entryLines(
           f,

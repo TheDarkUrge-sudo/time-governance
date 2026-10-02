@@ -42,6 +42,12 @@ writes that year's workbook (Summary, Weekly detail, Escalations) to `out/`
 for performance reviews — it holds staff performance data, so keep it out of
 shared folders.
 
+**"Open timesheet" links stop opening the right page:** Karbon has moved its
+web route. Open any timesheet in Karbon, copy the new address, swap the
+timesheet key for `{key}`, update `KARBON_TIMESHEET_URL` and redeploy;
+`pnpm tg karbon:check` prints a link to confirm. Blank the setting to turn the
+links off.
+
 **Leavers:** set Status to Inactive rather than deleting the row — inactive
 people are skipped, and the row keeps their history readable.
 

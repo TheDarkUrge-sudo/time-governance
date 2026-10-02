@@ -10,6 +10,8 @@ import 'dotenv/config';
 
 import { z } from 'zod/v4';
 
+import { timesheetUrlProblem } from './karbon/links';
+
 const blankToUndefined = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
 const optionalString = z.preprocess(blankToUndefined, z.string().trim().optional());
 const optionalEmail = z.preprocess(blankToUndefined, z.email().optional());
@@ -42,6 +44,15 @@ const schema = z.object({
   KARBON_INTERNAL_CLIENT_KEYS: csv,
   /** Every client has an ad hoc work item; this is the title text that finds them. */
   KARBON_AD_HOC_TITLE: z.preprocess(blankToUndefined, z.string().default('Ad Hoc')),
+  /**
+   * The web address of a timesheet, with {key} where the timesheet key goes —
+   * copied from Karbon's address bar, e.g.
+   * https://app2.karbonhq.com/<tenant key>/timesheet/{key}. Unset = no links.
+   */
+  KARBON_TIMESHEET_URL: optionalString.superRefine((v, ctx) => {
+    const problem = v ? timesheetUrlProblem(v) : null;
+    if (problem) ctx.addIssue({ code: 'custom', message: `KARBON_TIMESHEET_URL ${problem}` });
+  }),
 
   SENDGRID_API_KEY: optionalString,
   SENDGRID_FROM_EMAIL: optionalEmail,

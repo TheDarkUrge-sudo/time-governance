@@ -13,5 +13,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
     testTimeout: 20_000,
+    // PGlite's first start in a cold container (or CI runner) can pass 10 s.
+    hookTimeout: 20_000,
   },
 });

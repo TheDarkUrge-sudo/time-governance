@@ -16,6 +16,7 @@ const week = (m: typeof chen, flags: PersonWeek['flags'], total = 600): PersonWe
   karbonUserId: `k-${m.email}`,
   minutes: { total, billable: total, nonBillable: 0, pto: 0, sick: 0, unclassified: 0 },
   minimalThresholdMinutes: 1200,
+  timesheetKey: null,
   flags,
 });
 const minimal = {
