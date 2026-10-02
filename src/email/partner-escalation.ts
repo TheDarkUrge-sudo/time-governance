@@ -5,6 +5,7 @@ import { FLAG_LABELS } from '../checks/weekly';
 import type { DateRange } from '../domain';
 import { escapeHtml } from '../format';
 import { commentText } from '../karbon/governance-notes';
+import { actionButton, type Draft, firstName, greeting, signOff } from './actions';
 import {
   type EmailContent,
   heading,
@@ -18,6 +19,60 @@ import {
 
 /** Escalated this many times in a calendar year counts as a pattern, even if not recent. */
 const YEAR_PATTERN = 3;
+
+const isRepeat = (r: EscalationRow) => r.weeksFlagged >= 2 || r.thisYear >= YEAR_PATTERN;
+
+/** " — flagged 3 of the last 4 weeks", " — escalated 4 times this year", or "". */
+function repeatClause(r: EscalationRow, lookbackWeeks: number): string {
+  if (r.weeksFlagged >= 2) return ` — flagged ${r.weeksFlagged} of the last ${lookbackWeeks} weeks`;
+  if (r.thisYear >= YEAR_PATTERN) return ` — escalated ${r.thisYear} times this year`;
+  return '';
+}
+
+/**
+ * The Partner's note to the employee. A first occurrence is a reminder; a
+ * repeat asks for a conversation and copies the manager. Signed "Thanks," —
+ * the email goes to all Partners, so the sender adds their own name.
+ */
+export function partnerEmployeeDraft(
+  r: EscalationRow,
+  week: DateRange,
+  lookbackWeeks: number,
+): Draft {
+  const weekLabel = shortDate(week.start);
+  const repeat = isRepeat(r);
+  const ask = repeat
+    ? `Your time for the week of ${weekLabel} still isn't in Karbon${repeatClause(r, lookbackWeeks)}. Please enter it today, and let's find 15 minutes next week to talk about keeping your time current.`
+    : `Your time for the week of ${weekLabel} still isn't in Karbon. Please enter it today.`;
+  return {
+    to: [r.member.email],
+    cc: repeat && r.member.managerEmail ? [r.member.managerEmail] : undefined,
+    subject: `Time entry: week of ${weekLabel}`,
+    opening: [greeting(r.member.name), '', ask].join('\n'),
+    closing: signOff(null),
+  };
+}
+
+/** The Partner's note to the employee's manager. */
+export function partnerManagerDraft(
+  r: EscalationRow,
+  week: DateRange,
+  lookbackWeeks: number,
+): Draft | null {
+  if (!r.member.managerEmail) return null;
+  const weekLabel = shortDate(week.start);
+  const who = firstName(r.member.name) ?? r.member.name;
+  return {
+    to: [r.member.managerEmail],
+    subject: `Time entry: ${r.member.name}, week of ${weekLabel}`,
+    opening: [
+      greeting(r.member.managerName),
+      '',
+      `${r.member.name}'s time for the week of ${weekLabel} still isn't in Karbon after the CSA's Tuesday follow-up${repeatClause(r, lookbackWeeks)}. Can you check in with ${who}?`,
+    ].join('\n'),
+    closing: signOff(null),
+  };
+}
 
 export function renderPartnerEscalation(opts: {
   week: DateRange;
@@ -43,22 +98,28 @@ export function renderPartnerEscalation(opts: {
       { label: 'Still missing' },
       { label: 'Weeks flagged', align: 'right' },
     ],
-    rows.map((r) => [
-      escapeHtml(r.member.name),
-      `<span style="color:${MUTED};">${escapeHtml(r.member.department)}</span>`,
-      `<span style="color:${MUTED};">${escapeHtml(r.member.managerName ?? '—')}</span>`,
-      `<span style="color:${MUTED};">${escapeHtml(FLAG_LABELS[r.kind])}</span>`,
-      (r.weeksFlagged >= 2
-        ? pill(`${r.weeksFlagged} of last ${lookbackWeeks}`, 'red')
-        : String(r.weeksFlagged)) +
-        (r.thisYear > r.weeksFlagged
-          ? `<div style="color:${MUTED};font-size:11px;margin-top:4px;white-space:nowrap;">${r.thisYear} this year</div>`
-          : ''),
-    ]),
+    rows.map((r) => {
+      const toManager = partnerManagerDraft(r, week, lookbackWeeks);
+      return [
+        `${escapeHtml(r.member.name)}<br/>${actionButton(
+          `Email ${firstName(r.member.name) ?? 'them'}`,
+          partnerEmployeeDraft(r, week, lookbackWeeks),
+        )}${toManager ? actionButton('Email manager', toManager) : ''}`,
+        `<span style="color:${MUTED};">${escapeHtml(r.member.department)}</span>`,
+        `<span style="color:${MUTED};">${escapeHtml(r.member.managerName ?? '—')}</span>`,
+        `<span style="color:${MUTED};">${escapeHtml(FLAG_LABELS[r.kind])}</span>`,
+        (r.weeksFlagged >= 2
+          ? pill(`${r.weeksFlagged} of last ${lookbackWeeks}`, 'red')
+          : String(r.weeksFlagged)) +
+          (r.thisYear > r.weeksFlagged
+            ? `<div style="color:${MUTED};font-size:11px;margin-top:4px;white-space:nowrap;">${r.thisYear} this year</div>`
+            : ''),
+      ];
+    }),
   );
 
   // A repeat is either recent (2+ of the last 4 weeks) or a pattern across the year.
-  const repeat = rows.filter((r) => r.weeksFlagged >= 2 || r.thisYear >= YEAR_PATTERN);
+  const repeat = rows.filter(isRepeat);
   const yearNote = (r: EscalationRow) =>
     r.thisYear > r.weeksFlagged ? ` (${r.thisYear} this year)` : '';
   const text: string[] = [

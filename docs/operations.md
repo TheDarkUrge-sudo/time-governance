@@ -17,6 +17,10 @@ would have gone to.
 Switching shadow → live does not re-send anything already sent live, and a
 shadow send never blocks the live one (sends are keyed by mode).
 
+The **Email {name}** buttons in a shadow email open drafts addressed to the
+real people — that is the point of the trial (check the wording), but a draft
+only goes out if you press Send. The banner says so.
+
 ## Day to day
 
 **Status.** `pnpm tg status` — mode, integrations, roster size and last

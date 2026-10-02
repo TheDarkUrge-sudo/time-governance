@@ -70,6 +70,18 @@ Each indicator flag in the CSA email lists the entries behind it (date,
 client, hours, task type, and the description where it matters), up to five,
 so CSAs can follow up without opening Karbon.
 
+**Every email is actionable.** Next to each flagged person is an **Email
+{name}** button that opens a ready-to-edit draft in the reader's own mail
+client — nothing is sent until they press Send:
+
+- **CSA (Tuesday):** "I don't see your time for the week of Sep 21 in Karbon.
+  Can you enter it by Thursday?", plus the specific entries to fix for any
+  indicator flag.
+- **Partners (Friday):** **Email {name}** — a reminder the first time; on a
+  repeat, a request to talk, copying the manager — and **Email manager**.
+- **Manager (monthly):** a note to each person under target or sharply down,
+  with their numbers and an offer to talk.
+
 All thresholds are environment settings (see `.env.example`).
 
 ## Set up

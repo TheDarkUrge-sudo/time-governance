@@ -2,6 +2,7 @@
 import { monthLabel, monthName, shortMonth } from '../calendar';
 import { trendPoints, type UtilizationRow } from '../checks/utilization';
 import { escapeHtml, hours, percent } from '../format';
+import { actionButton, type Draft, firstName, greeting, signOff } from './actions';
 import { type EmailContent, FONT, heading, MUTED, paragraph, table, textFooter } from './layout';
 
 /** "▲ 4", "▼ 8", "±0", or "—" when there is nothing to compare. */
@@ -23,6 +24,41 @@ const plural = (n: number) => (n === 1 ? 'point' : 'points');
 
 /** Changes smaller than this stay grey in the trend column. */
 const NOTABLE_POINTS = 5;
+
+/** Under target, or at target but down `dropPoints` or more — the people the summary names. */
+function calledOut(r: UtilizationRow, dropPoints: number): boolean {
+  if (r.underTarget && r.utilization !== null && r.target !== null) return true;
+  const points = trendPoints(r);
+  return points !== null && points <= -dropPoints;
+}
+
+/** The manager's note to someone the report calls out: the numbers, then an offer to talk. */
+export function managerStaffDraft(opts: {
+  month: string;
+  previousMonth: string;
+  managerName: string | null;
+  row: UtilizationRow;
+}): Draft {
+  const { row: r } = opts;
+  const phrase = trendPhrase(trendPoints(r), opts.previousMonth);
+  const util = r.utilization === null ? '—' : percent(r.utilization);
+  const vsTarget =
+    r.target === null
+      ? ''
+      : r.underTarget
+        ? ` against a target of ${percent(r.target)}`
+        : ` (target ${percent(r.target)})`;
+  return {
+    to: [r.member.email],
+    subject: `${monthName(opts.month)} utilization`,
+    opening: [
+      greeting(r.member.name),
+      '',
+      `Your billable utilization for ${monthName(opts.month)} was ${util}${vsTarget}${phrase ? `, ${phrase}` : ''}. Can we find 15 minutes this week to look at your workload and what's coming up?`,
+    ].join('\n'),
+    closing: signOff(opts.managerName),
+  };
+}
 
 export function renderManagerMonthly(opts: {
   /** YYYY-MM */
@@ -75,7 +111,19 @@ export function renderManagerMonthly(opts: {
       { label: 'Target', align: 'right' },
     ],
     opts.rows.map((r) => [
-      `<span style="white-space:nowrap;">${escapeHtml(r.member.name)}</span>`,
+      `<span style="white-space:nowrap;">${escapeHtml(r.member.name)}</span>${
+        calledOut(r, opts.dropPoints)
+          ? `<br/>${actionButton(
+              `Email ${firstName(r.member.name) ?? 'them'}`,
+              managerStaffDraft({
+                month: opts.month,
+                previousMonth: prev,
+                managerName: opts.managerName,
+                row: r,
+              }),
+            )}`
+          : ''
+      }`,
       `<span style="color:${MUTED};">${escapeHtml(r.member.department)}</span>`,
       `${hours(r.minutes.billable)}h`,
       `${hours(r.minutes.nonBillable)}h`,

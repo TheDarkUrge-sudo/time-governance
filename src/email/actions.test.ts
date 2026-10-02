@@ -1,0 +1,172 @@
+import { describe, expect, it } from 'vitest';
+
+import { member } from '../test-fixtures';
+import { actionButton, firstName, mailtoHref, MAX_MAILTO_LENGTH } from './actions';
+import { csaDraft } from './csa-weekly';
+import { managerStaffDraft } from './manager-monthly';
+import { partnerEmployeeDraft, partnerManagerDraft } from './partner-escalation';
+
+const week = { start: '2026-09-21', end: '2026-09-27' };
+const none = { total: 0, billable: 0, nonBillable: 0, pto: 0, sick: 0, unclassified: 0 };
+
+/** The draft a mailto link opens, decoded the way a mail client would. */
+function open(href: string) {
+  const [addr, query] = href.slice('mailto:'.length).split('?') as [string, string];
+  const params = new URLSearchParams(query.replace(/\+/g, '%2B'));
+  return {
+    to: decodeURIComponent(addr),
+    cc: params.get('cc'),
+    subject: params.get('subject'),
+    body: params.get('body'),
+  };
+}
+
+describe('email actions', () => {
+  it('encodes the draft so any mail client opens it intact', () => {
+    const href = mailtoHref({
+      to: ['jo.lee@hfacpas.com'],
+      cc: ['dana+x@hfacpas.com'],
+      subject: 'Time & billing: "week" of Sep 21?',
+      opening: "Hi Jo,\n\nI don't see 50% done #1",
+      closing: 'Thanks,',
+    });
+    expect(href).toMatch(/^mailto:jo\.lee@hfacpas\.com\?cc=dana%2Bx@hfacpas\.com&subject=/);
+    expect(href).not.toMatch(/[ \n"#']/);
+    expect(href).toContain('%0D%0A'); // CRLF line breaks (RFC 6068)
+    const d = open(href);
+    expect(d.subject).toBe('Time & billing: "week" of Sep 21?');
+    expect(d.cc).toBe('dana+x@hfacpas.com');
+    expect(d.body).toBe("Hi Jo,\r\n\r\nI don't see 50% done #1\r\n\r\nThanks,");
+  });
+
+  it('escapes the link for HTML and shortens drafts that would be too long', () => {
+    const html = actionButton('Email <Jo>', {
+      to: ['jo@hfacpas.com'],
+      subject: 'a&b',
+      opening: 'Hi',
+      closing: 'Thanks,',
+    });
+    expect(html).toContain('?subject=a%26b&amp;body=');
+    expect(html).toContain('Email &lt;Jo&gt;');
+
+    const details = Array.from({ length: 60 }, (_, i) => `- Entry ${i} · Acme Corp · 1.0 h`);
+    const href = mailtoHref({
+      to: ['jo@hfacpas.com'],
+      subject: 's',
+      opening: 'Hi',
+      details,
+      closing: 'Thanks,\nTaylor',
+    });
+    expect(href.length).toBeLessThanOrEqual(MAX_MAILTO_LENGTH);
+    const body = open(href).body!;
+    expect(body).toMatch(/\(\+\d+ more — see Karbon\)\r\n\r\nThanks,\r\nTaylor$/);
+    expect(body).toContain('- Entry 0 ·');
+  });
+
+  it('finds a first name either way round', () => {
+    expect(firstName('Jordan Lee')).toBe('Jordan');
+    expect(firstName('Lee, Jordan A.')).toBe('Jordan');
+    expect(firstName('  ')).toBeNull();
+  });
+
+  it('CSA draft: one note per person — missing time by Thursday, then the entries to fix', () => {
+    const d = csaDraft({
+      week,
+      csaName: 'Taylor Brooks',
+      person: {
+        member: member({ name: 'Jordan Lee' }),
+        karbonUserId: 'k',
+        minutes: { ...none, total: 390 },
+        minimalThresholdMinutes: 1200,
+        flags: [
+          { kind: 'minimal_entry', minutes: 390, detail: '6.5 h logged' },
+          {
+            kind: 'nonbillable_unexplained',
+            minutes: 60,
+            detail: '1 entry',
+            entries: [
+              {
+                date: '2026-09-22',
+                client: 'Acme Corp',
+                minutes: 60,
+                taskType: 'Admin',
+                role: null,
+                description: null,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(d.to).toEqual(['jordan.lee@hfacpas.com']);
+    expect(d.subject).toBe('Time entry: week of Sep 21');
+    const body = open(mailtoHref(d)).body!.replace(/\r\n/g, '\n');
+    expect(body).toBe(
+      [
+        'Hi Jordan,',
+        '',
+        'I only see 6.5 hours for the week of Sep 21 in Karbon. Can you enter the rest by Thursday?',
+        'Also, a few of your time entries for the week of Sep 21 need a fix in Karbon:',
+        '',
+        'Non-billable client time without a clear description — please add what the time was for:',
+        '- Tue Sep 22 · Acme Corp · 1.0 h · Admin · (no description)',
+        '',
+        'Thanks,',
+        'Taylor',
+      ].join('\n'),
+    );
+  });
+
+  it('Partner drafts: a reminder the first time; a conversation, copying the manager, on a repeat', () => {
+    const row = (weeksFlagged: number, thisYear: number) => ({
+      member: member({ name: 'Riley Chen' }),
+      kind: 'no_entry' as const,
+      minutes: 0,
+      weeksFlagged,
+      lookbackWeeks: 4,
+      thisYear,
+    });
+    const first = partnerEmployeeDraft(row(1, 1), week, 4);
+    expect(first.cc).toBeUndefined();
+    expect(first.opening).toContain("still isn't in Karbon. Please enter it today.");
+    expect(first.closing).toBe('Thanks,');
+
+    const repeat = partnerEmployeeDraft(row(3, 9), week, 4);
+    expect(repeat.cc).toEqual(['dferris@hfacpas.com']);
+    expect(repeat.opening).toContain('— flagged 3 of the last 4 weeks. Please enter it today');
+    expect(repeat.opening).toContain("let's find 15 minutes");
+    expect(partnerEmployeeDraft(row(1, 4), week, 4).opening).toContain(
+      'escalated 4 times this year',
+    );
+
+    const mgr = partnerManagerDraft(row(3, 9), week, 4)!;
+    expect(mgr.to).toEqual(['dferris@hfacpas.com']);
+    expect(mgr.subject).toBe('Time entry: Riley Chen, week of Sep 21');
+    expect(mgr.opening).toMatch(/^Hi Dana,\n\nRiley Chen's time .* Can you check in with Riley\?$/);
+    const noManager = { ...row(1, 1), member: member({ name: 'Solo', managerEmail: null }) };
+    expect(partnerManagerDraft(noManager, week, 4)).toBeNull();
+  });
+
+  it('Manager draft: the numbers, the trend and an offer to talk, signed by the manager', () => {
+    const d = managerStaffDraft({
+      month: '2026-09',
+      previousMonth: '2026-08',
+      managerName: 'Dana Ferris',
+      row: {
+        member: member({ name: 'Riley Chen' }),
+        minutes: none,
+        capacityMinutes: 6000,
+        capacitySource: 'karbon',
+        utilization: 0.62,
+        previousUtilization: 0.71,
+        target: 0.75,
+        underTarget: true,
+      },
+    });
+    expect(d.subject).toBe('September utilization');
+    expect(d.opening).toContain(
+      'Your billable utilization for September was 62% against a target of 75%, down 9 from August.',
+    );
+    expect(d.closing).toBe('Thanks,\nDana');
+  });
+});

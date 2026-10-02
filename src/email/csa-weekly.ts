@@ -10,6 +10,7 @@ import {
 } from '../checks/weekly';
 import type { DateRange, RosterMember } from '../domain';
 import { escapeHtml, hours } from '../format';
+import { actionButton, type Draft, firstName, greeting, signOff } from './actions';
 import {
   type EmailContent,
   heading,
@@ -54,6 +55,61 @@ export function entryLines(f: Flag): string[] {
     lines.push(`+${more} more ${more === 1 ? 'entry' : 'entries'}`);
   }
   return lines;
+}
+
+/** What the employee is asked to do about each indicator flag, in the draft. */
+const ASK: Partial<Record<FlagKind, string>> = {
+  internal_client_billable:
+    'Billable time on the internal HFA client — it should be a non-billable task type, or moved to the client it was for:',
+  internal_only_role: 'An internal-only role on client work — please change the role:',
+  nonbillable_unexplained:
+    'Non-billable client time without a clear description — please add what the time was for:',
+  ad_hoc_work:
+    "Time on a client's Ad Hoc work item — if it belongs to a specific engagement, please move it there:",
+};
+
+/**
+ * One draft per person covering all their flags this week: missing time first
+ * (enter it by Thursday, before Friday's escalation), then the entries to fix.
+ */
+export function csaDraft(opts: {
+  week: DateRange;
+  csaName: string | null;
+  person: PersonWeek;
+}): Draft {
+  const { person } = opts;
+  const weekLabel = shortDate(opts.week.start);
+  const asks: string[] = [];
+  const details: string[] = [];
+  for (const f of person.flags) {
+    if (f.kind === 'no_entry') {
+      asks.push(
+        `I don't see your time for the week of ${weekLabel} in Karbon. Can you enter it by Thursday?`,
+      );
+    } else if (f.kind === 'minimal_entry') {
+      asks.push(
+        `I only see ${hours(person.minutes.total)} hours for the week of ${weekLabel} in Karbon. Can you enter the rest by Thursday?`,
+      );
+    }
+  }
+  const indicators = person.flags.filter((f) => !MISSING_KINDS.has(f.kind));
+  if (indicators.length > 0) {
+    asks.push(
+      `${asks.length > 0 ? 'Also, a' : 'A'} few of your time entries for the week of ${weekLabel} need a fix in Karbon:`,
+    );
+    for (const f of indicators) {
+      if (details.length > 0) details.push('');
+      details.push(ASK[f.kind] ?? FLAG_LABELS[f.kind]);
+      for (const e of f.entries ?? []) details.push(`- ${entryLine(f.kind, e)}`);
+    }
+  }
+  return {
+    to: [person.member.email],
+    subject: `Time entry: week of ${weekLabel}`,
+    opening: [greeting(person.member.name), '', ...asks].join('\n'),
+    details,
+    closing: signOff(opts.csaName),
+  };
 }
 
 const TONE: Record<FlagKind, PillTone> = {
@@ -122,7 +178,11 @@ export function renderCsaWeekly(opts: {
         { label: 'Hours', align: 'right' },
       ],
       flagged.map(({ p, f }) => [
-        escapeHtml(p.member.name),
+        // Every row of a person opens the same draft, covering all their flags.
+        `${escapeHtml(p.member.name)}<br/>${actionButton(
+          `Email ${firstName(p.member.name) ?? 'them'}`,
+          csaDraft({ week, csaName: opts.csaName, person: p }),
+        )}`,
         `<span style="color:${MUTED};">${escapeHtml(p.member.department)}</span>`,
         `${pill(FLAG_LABELS[f.kind], TONE[f.kind])}<div style="color:${MUTED};font-size:11px;margin-top:4px;">${escapeHtml(f.detail)}</div>${entryLines(
           f,

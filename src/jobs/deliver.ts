@@ -76,7 +76,7 @@ export async function deliver(ctx: DeliveryContext, d: Delivery): Promise<Delive
   const deliveredTo = shadow ? [ctx.shadowTo!] : d.to;
   const subject = shadow ? `[Shadow] ${d.content.subject}` : d.content.subject;
   const notice = shadow
-    ? `Shadow mode — in live mode this email goes to: ${d.to.join(', ')}`
+    ? `Shadow mode — in live mode this email goes to: ${d.to.join(', ')}. Any Email buttons open drafts to the real people; nothing goes out unless you press Send.`
     : undefined;
 
   const claim = await ctx.store.claimSend({
