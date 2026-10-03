@@ -31,13 +31,45 @@ describe('monthly utilization', () => {
   });
   const row = (name: string) => report.rows.find((r) => r.member.name === name)!;
 
-  it('uses Karbon capacity, net of firm holidays, gross of PTO', () => {
+  it('uses Karbon capacity, net of firm holidays and of PTO/sick logged', () => {
     const r = row('Riley Chen');
     expect(r.capacitySource).toBe('karbon');
-    expect(r.capacityMinutes).toBe(2400 * (21 / 5)); // 168 h
+    expect(r.capacityMinutes).toBe(2400 * (21 / 5) - 8 * 60); // 168 h − 8 h PTO = 160 h
     expect(r.minutes).toMatchObject({ billable: 6000, nonBillable: 1080, pto: 480 });
-    expect(r.utilization).toBeCloseTo(100 / 168, 5);
+    expect(r.utilization).toBeCloseTo(100 / 160, 5);
     expect(r.underTarget).toBe(true);
+  });
+
+  it('subtracts leave only on working days; a month all on leave has no figure', () => {
+    const lee = member({ name: 'Jo Lee', utilizationTarget: 0.8 });
+    const away = member({ name: 'Away All Month', utilizationTarget: 0.8 });
+    const [a, b] = [userFor(lee), userFor(away)];
+    const workdays = Array.from(
+      { length: 30 },
+      (_, i) => `2026-09-${String(i + 1).padStart(2, '0')}`,
+    ).filter((d) => ![0, 6].includes(new Date(`${d}T00:00:00Z`).getUTCDay()) && d !== '2026-09-07');
+    const r = runUtilization({
+      month: SEPT,
+      roster: roster([lee, away], { holidays: LABOR_DAY }),
+      users: [a, b],
+      entries: [
+        entry({ userKey: a.id, date: '2026-09-07', minutes: 480, taskTypeName: 'PTO' }), // Labor Day
+        entry({ userKey: a.id, date: '2026-09-12', minutes: 240, taskTypeName: 'PTO' }), // a Saturday
+        entry({ userKey: a.id, date: '2026-09-14', minutes: 480, taskTypeName: 'Sick' }),
+        entry({ userKey: a.id, date: '2026-09-15', minutes: 120 * 60 }),
+        ...workdays.map((d) =>
+          entry({ userKey: b.id, date: d, minutes: 480, taskTypeName: 'PTO' }),
+        ),
+      ],
+      capacityMinutesPerWeek: new Map(),
+      policy: DEFAULT_POLICY,
+    });
+    const jo = r.rows.find((x) => x.member.name === 'Jo Lee')!;
+    expect(jo.capacityMinutes).toBe(168 * 60 - 480); // only the sick day counts
+    const gone = r.rows.find((x) => x.member.name === 'Away All Month')!;
+    expect(gone.capacityMinutes).toBe(0);
+    expect(gone.utilization).toBeNull();
+    expect(gone.underTarget).toBe(false);
   });
 
   it('falls back to the roster hours, then the full-time week', () => {
@@ -66,9 +98,9 @@ describe('monthly utilization', () => {
     });
     const withTrend = attachTrend(report, august);
     const r = withTrend.rows.find((x) => x.member.name === 'Riley Chen')!;
-    // August: 120 h of 21 working days × 8 h = 168 h → 71%; September 60%.
+    // August: 120 h of 21 working days × 8 h = 168 h → 71%; September 100 / 160 h → 63%.
     expect(r.previousUtilization).toBeCloseTo(120 / 168, 5);
-    expect(trendPoints(r)).toBe(60 - 71);
+    expect(trendPoints(r)).toBe(63 - 71);
     // Okafor logged nothing in August: nothing to compare, not 0%.
     expect(
       withTrend.rows.find((x) => x.member.name === 'Morgan Okafor')!.previousUtilization,

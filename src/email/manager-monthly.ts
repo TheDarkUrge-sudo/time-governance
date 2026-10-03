@@ -22,6 +22,10 @@ function trendPhrase(points: number | null, month: string): string | null {
 
 const plural = (n: number) => (n === 1 ? 'point' : 'points');
 
+/** What "capacity" means, under every report (decision 27). */
+const CAPACITY_NOTE =
+  'Capacity is the time each person was available: their working days, less firm holidays and the PTO and sick time they logged — so time off doesn’t lower utilization.';
+
 /** Changes smaller than this stay grey in the trend column. */
 const NOTABLE_POINTS = 5;
 
@@ -159,6 +163,7 @@ export function renderManagerMonthly(opts: {
       ? 'Everyone with a target is at or above it, with no sharp drops.'
       : `${lines.join(' ')} Worth a look before it becomes a pattern.`;
   html += paragraph(escapeHtml(summary), { muted: true });
+  html += `<p style="${FONT};color:${MUTED};font-size:11px;margin:8px 0 0;">${escapeHtml(CAPACITY_NOTE)}</p>`;
   if (flaggedCapacity) {
     html += `<p style="${FONT};color:${MUTED};font-size:11px;margin:8px 0 0;">* Karbon has no capacity set for this person, so capacity uses the roster's expected weekly hours (or a full-time week).</p>`;
   }
@@ -176,6 +181,8 @@ export function renderManagerMonthly(opts: {
     }),
     '',
     summary,
+    '',
+    CAPACITY_NOTE,
   ];
   return { subject, bodyHtml: html, text: text.join('\n') + textFooter() };
 }
