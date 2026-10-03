@@ -41,6 +41,7 @@ import { describeResults } from './jobs/deliver';
 import { runFriday } from './jobs/friday';
 import { runMonthly } from './jobs/monthly';
 import { runTuesday } from './jobs/tuesday';
+import { findMissedRuns } from './jobs/watchdog';
 import { KarbonClient, karbonConfigured } from './karbon/client';
 import { resolveInternalClients } from './karbon/internal-client';
 import { timesheetUrl } from './karbon/links';
@@ -94,6 +95,19 @@ async function main(): Promise<number> {
   }
 }
 
+async function missedRunLines(store: Store): Promise<string[]> {
+  const missed = await findMissedRuns(store, new Date(), env.FIRM_TIMEZONE);
+  if (missed.length === 0) return [];
+  return [
+    'MISSED RUNS (the worker emails TG_ADMIN_TO about these):',
+    ...missed.map(
+      (m) =>
+        `  ${m.job.padEnd(8)} ${m.period}  scheduled ${m.scheduledOn} 9:00 — ${m.last ? (m.last.status === 'failed' ? `failed: ${m.last.error ?? '?'}` : 'never finished') : 'no record'}`,
+    ),
+    '',
+  ];
+}
+
 async function status(): Promise<number> {
   say(
     `Mode:       ${env.TG_MODE}${env.TG_MODE === 'shadow' ? ` (all email → ${env.TG_SHADOW_TO ?? 'TG_SHADOW_TO NOT SET'})` : ''}`,
@@ -116,6 +130,7 @@ async function status(): Promise<number> {
     say(
       `Roster:     ${counts.members} people, ${counts.taskTypes} task types${last ? ` (uploaded ${firmLocalDate(last.createdAt, env.FIRM_TIMEZONE)} from ${last.fileName})` : ' — never uploaded'}`,
       '',
+      ...(await missedRunLines(store)),
       'Recent runs:',
       ...(await store.recentRuns()).map(
         (r) =>

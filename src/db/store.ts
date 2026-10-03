@@ -435,6 +435,16 @@ export class Store {
     return rows[0] ?? null;
   }
 
+  /** Whether `job` has any run (any outcome) for a period before `period` — i.e. it was already live. */
+  async hadEarlierRun(job: JobName, period: string): Promise<boolean> {
+    const rows = await this.db
+      .select({ id: jobRuns.id })
+      .from(jobRuns)
+      .where(and(eq(jobRuns.job, job), lt(jobRuns.period, period)))
+      .limit(1);
+    return rows.length > 0;
+  }
+
   async recentRuns(limit = 10) {
     return this.db
       .select()

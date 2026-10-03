@@ -34,7 +34,8 @@ database is in-process PGlite with the real migrations (`src/db/test-db.ts`).
 - `src/jobs/` — Tuesday / Friday / monthly orchestration; `deliver.ts` applies
   the mode (off/shadow/live), claims each send, writes dry-run previews.
 - `src/db/` — Drizzle schema, `Store` (all SQL), migrations in `migrations/`.
-- `src/worker.ts` — node-cron schedules in `FIRM_TIMEZONE`. `src/cli.ts` — the CLI.
+- `src/worker.ts` — node-cron schedules in `FIRM_TIMEZONE`, plus the hourly missed-run
+  check (`src/jobs/watchdog.ts` — alerts only, never re-runs a job). `src/cli.ts` — the CLI.
 - `Dockerfile` — the production image (Azure Container Apps, `docs/azure.md`).
   It execs the worker as PID 1 so SIGTERM reaches the graceful drain; keep it
   that way.

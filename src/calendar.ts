@@ -36,6 +36,18 @@ export function firmLocalDate(now: Date, timeZone: string): string {
   }).format(now);
 }
 
+/** The firm-local date and minutes past midnight (0–1439) at `now`. */
+export function firmLocalTime(now: Date, timeZone: string): { date: string; minutes: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const num = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return { date: firmLocalDate(now, timeZone), minutes: num('hour') * 60 + num('minute') };
+}
+
 /** The Monday of the week containing `iso`. */
 export function mondayOf(iso: string): string {
   return addDays(iso, -((weekday(iso) + 6) % 7));

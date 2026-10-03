@@ -5,6 +5,7 @@ import type { Roster } from './domain';
 import { emailConfigured, sendgridTransport } from './email/sendgrid';
 import { env } from './env';
 import type { JobDeps } from './jobs/context';
+import type { DeliveryContext } from './jobs/deliver';
 import { KarbonClient } from './karbon/client';
 import { GovernanceClients } from './karbon/governance-notes';
 import { resolveInternalClients } from './karbon/internal-client';
@@ -95,4 +96,19 @@ export async function liveRuntime(opts: {
     await close().catch(() => undefined);
     throw err;
   }
+}
+
+/**
+ * Delivery for the missed-run alert: just the database and SendGrid, per
+ * TG_MODE — no Karbon, so the alert still goes out when Karbon is the problem.
+ */
+export function alertDelivery(store: Store): DeliveryContext {
+  return {
+    mode: env.TG_MODE,
+    shadowTo: env.TG_SHADOW_TO ?? null,
+    store,
+    transport: env.TG_MODE !== 'off' && emailConfigured() ? sendgridTransport() : null,
+    dryRun: false,
+    outDir: null,
+  };
 }

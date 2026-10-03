@@ -83,10 +83,11 @@ with a banner naming who would have received it.
 
 ## 9. Shadow trial (the hosted worker)
 
-| ✓   | Step                                                                                                                                                                                                      | Who   |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| ☐   | **Start the worker** (it applies migrations, then runs the schedules: Tue 9:00, Fri 9:00, Monday of week 2 at 9:00, firm time). `pnpm tg status` shows each run.                                          | IT    |
-| ☐   | **Gates** ([operations → Rollout](operations.md#rollout)): two shadow Tuesdays with no wrong flags · two shadow Fridays · one shadow monthly report that reconciles with Karbon. Read each admin summary. | Owner |
+| ✓   | Step                                                                                                                                                                                                                                                                                                                                      | Who   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| ☐   | **Start the worker** (it applies migrations, then runs the schedules: Tue 9:00, Fri 9:00, Monday of week 2 at 9:00, firm time). `pnpm tg status` shows each run. From each job's first run on, the worker emails `TG_ADMIN_TO` if a later scheduled run is missed (hourly check — [operations](operations.md#when-something-goes-wrong)). | IT    |
+| ☐   | Turn on the host's monitoring for the worker itself — **Replit's deployment monitoring** (or Azure Monitor) — so you hear if the worker goes down. The missed-run email only arrives once it is back.                                                                                                                                     | IT    |
+| ☐   | **Gates** ([operations → Rollout](operations.md#rollout)): two shadow Tuesdays with no wrong flags · two shadow Fridays · one shadow monthly report that reconciles with Karbon. Read each admin summary.                                                                                                                                 | Owner |
 
 ## 10. Go live
 

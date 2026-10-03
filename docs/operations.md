@@ -58,6 +58,21 @@ it is added.
 
 ## When something goes wrong
 
+**Missed-run alerts.** Every hour, and whenever the worker starts, it checks
+that each job's latest 9:00 run has a successful record. If not (an hour after
+the slot), `TG_ADMIN_TO` gets one email — "Missed run: Tuesday review, week of
+Sep 21" — saying what the record shows (no run at all, a failure and its error,
+or a run that never finished) and the exact command to run it now. One email
+per missed run, never repeated hourly; it never re-runs a job itself.
+`pnpm tg status` lists the same missed runs.
+
+What it can't see: a worker that is down can't send anything, so a run missed
+during an outage is reported when the worker comes back up (the check runs on
+start). For the outage itself, use the host's own monitoring — Replit's
+deployment monitoring, or Azure Monitor on Azure. A job is watched only once it has run at least once, so a first deploy
+doesn't alert about runs from before it existed. In shadow mode the alert goes
+to `TG_SHADOW_TO`, like every other email.
+
 **A scheduled run failed or the worker was down.** Run it by hand — it covers
 the same period the schedule would have:
 
