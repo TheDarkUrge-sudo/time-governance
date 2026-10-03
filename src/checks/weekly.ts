@@ -191,7 +191,9 @@ export function minimalThresholdMinutes(opts: {
 export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
   const { week, roster, policy } = input;
   const byEmail = usersByEmail(input.users);
-  const holidayCount = weekdayHolidays(week, roster.holidays).length;
+  const weekHolidays = weekdayHolidays(week, roster.holidays);
+  const holidayCount = weekHolidays.length;
+  const holidayDates = new Set(weekHolidays.map((h) => h.date));
   const inWeek = input.entries.filter((e) => e.date >= week.start && e.date <= week.end);
   const entriesByUser = new Map<string, TimeEntry[]>();
   for (const e of inWeek) {
@@ -242,7 +244,15 @@ export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
       : minimalThresholdMinutes({
           expectedWeeklyHours: member.expectedWeeklyHours ?? policy.fullTimeWeekHours,
           holidayCount,
-          leaveMinutes: minutes.pto + minutes.sick,
+          // A firm holiday already lowers the line; PTO logged on it (a "PTO -
+          // Holiday" code) must not lower it a second time.
+          leaveMinutes: entries
+            .filter((e) => !holidayDates.has(e.date))
+            .filter((e) => {
+              const c = categoryOf(roster.taskTypes, e.taskTypeName);
+              return c === 'pto' || c === 'sick';
+            })
+            .reduce((acc, e) => acc + e.minutes, 0),
           policy,
         });
     if (threshold !== null) {

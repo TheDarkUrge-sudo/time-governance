@@ -5,6 +5,8 @@
  */
 import ExcelJS from 'exceljs';
 
+import { HFA_TASK_TYPES } from './hfa-task-types';
+
 export const ROSTER_HEADERS = [
   'Employee Name',
   'Email',
@@ -125,11 +127,14 @@ export async function buildTemplateWorkbook(): Promise<Buffer> {
   const tasks = wb.addWorksheet('Task Types');
   note(
     tasks,
-    'Every Karbon task type, with how it counts. Run `pnpm tg karbon:task-types` to list the task types used in Karbon recently; any type missing here is reported each week.',
+    'HFA’s Karbon task types, pre-filled (billability as Karbon sets it). Run `pnpm tg karbon:task-types` to check them against Karbon; a new or renamed type missing here is reported each week.',
     TASK_TYPE_HEADERS.length,
   );
   header(tasks, TASK_TYPE_HEADERS);
-  widths(tasks, [40, 16]);
+  HFA_TASK_TYPES.forEach(([name, category], i) => {
+    tasks.getRow(3 + i).values = [name, category];
+  });
+  widths(tasks, [52, 16]);
   list(tasks, 'B', 'Lists!$D$2:$D$5');
 
   const holidays = wb.addWorksheet('Holidays');

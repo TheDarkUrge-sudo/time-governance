@@ -115,8 +115,9 @@ In short:
 6. The internal client is found by its client ID, **99999** by default
    (`KARBON_INTERNAL_CLIENT_IDS`). `karbon:check` shows what it resolved to.
 7. **Fill in the roster workbook** — start from
-   `templates/HFA_Staff_Roster_Template.xlsx`. `pnpm tg karbon:task-types`
-   lists every task type used in the last 90 days, for the Task Types tab.
+   `templates/HFA_Staff_Roster_Template.xlsx` (its Task Types tab is
+   pre-filled with HFA's task types). `pnpm tg karbon:task-types` checks them
+   against what Karbon actually uses.
 8. `pnpm tg roster:import roster.xlsx` (preview) → `… --apply` (save).
 9. **Dry run against real data** — `pnpm tg run tuesday --dry-run`. Nothing
    is sent or saved; the emails are written to `out/`. Compare them with
