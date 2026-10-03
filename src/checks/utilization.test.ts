@@ -56,6 +56,7 @@ describe('monthly utilization', () => {
         entry({ userKey: a.id, date: '2026-09-07', minutes: 480, taskTypeName: 'PTO' }), // Labor Day
         entry({ userKey: a.id, date: '2026-09-12', minutes: 240, taskTypeName: 'PTO' }), // a Saturday
         entry({ userKey: a.id, date: '2026-09-14', minutes: 480, taskTypeName: 'Sick' }),
+        entry({ userKey: a.id, date: '2026-09-14', minutes: 480, taskTypeName: 'Sick' }), // twice
         entry({ userKey: a.id, date: '2026-09-15', minutes: 120 * 60 }),
         ...workdays.map((d) =>
           entry({ userKey: b.id, date: d, minutes: 480, taskTypeName: 'PTO' }),
@@ -65,7 +66,7 @@ describe('monthly utilization', () => {
       policy: DEFAULT_POLICY,
     });
     const jo = r.rows.find((x) => x.member.name === 'Jo Lee')!;
-    expect(jo.capacityMinutes).toBe(168 * 60 - 480); // only the sick day counts
+    expect(jo.capacityMinutes).toBe(168 * 60 - 480); // only one sick day counts, once
     const gone = r.rows.find((x) => x.member.name === 'Away All Month')!;
     expect(gone.capacityMinutes).toBe(0);
     expect(gone.utilization).toBeNull();

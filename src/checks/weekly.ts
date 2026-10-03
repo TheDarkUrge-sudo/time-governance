@@ -7,7 +7,7 @@
  * because Karbon's API hands us each entry's task type NAME but not the
  * billable flag Karbon keeps on the task type itself.
  */
-import { weekdayHolidays } from '../calendar';
+import { weekdayHolidays, workingDays } from '../calendar';
 import type {
   DateRange,
   KarbonUser,
@@ -191,9 +191,8 @@ export function minimalThresholdMinutes(opts: {
 export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
   const { week, roster, policy } = input;
   const byEmail = usersByEmail(input.users);
-  const weekHolidays = weekdayHolidays(week, roster.holidays);
-  const holidayCount = weekHolidays.length;
-  const holidayDates = new Set(weekHolidays.map((h) => h.date));
+  const holidayCount = weekdayHolidays(week, roster.holidays).length;
+  const workingDates = new Set(workingDays(week, roster.holidays));
   const inWeek = input.entries.filter((e) => e.date >= week.start && e.date <= week.end);
   const entriesByUser = new Map<string, TimeEntry[]>();
   for (const e of inWeek) {
@@ -239,20 +238,20 @@ export function runWeeklyChecks(input: WeeklyInput): WeeklyReview {
 
     // Missing / minimal. Someone hired mid-week is not held to a full week.
     const hiredMidWeek = member.hireDate !== null && member.hireDate > week.start;
+    const expectedWeeklyHours = member.expectedWeeklyHours ?? policy.fullTimeWeekHours;
     const threshold = hiredMidWeek
       ? null
       : minimalThresholdMinutes({
-          expectedWeeklyHours: member.expectedWeeklyHours ?? policy.fullTimeWeekHours,
+          expectedWeeklyHours,
           holidayCount,
-          // A firm holiday already lowers the line; PTO logged on it (a "PTO -
-          // Holiday" code) must not lower it a second time.
-          leaveMinutes: entries
-            .filter((e) => !holidayDates.has(e.date))
-            .filter((e) => {
-              const c = categoryOf(roster.taskTypes, e.taskTypeName);
-              return c === 'pto' || c === 'sick';
-            })
-            .reduce((acc, e) => acc + e.minutes, 0),
+          // Leave on a firm holiday (a "PTO - Holiday" code) or a weekend
+          // doesn't lower the line again — those days were never expected.
+          leaveMinutes: leaveOnWorkingDays(
+            entries,
+            roster.taskTypes,
+            workingDates,
+            (expectedWeeklyHours * 60) / 5,
+          ),
           policy,
         });
     if (threshold !== null) {
@@ -393,6 +392,30 @@ export function mainTimesheet(entries: readonly TimeEntry[]): string | null {
     if (m > bestMinutes) [best, bestMinutes] = [key, m];
   }
   return best;
+}
+
+/**
+ * PTO and sick minutes that reduce expected time: only those logged on the
+ * given working days (a weekend or firm holiday was never expected time), and
+ * at most one day's hours per day, so a duplicated or over-long entry can't
+ * erase a week's line or a month's capacity.
+ */
+export function leaveOnWorkingDays(
+  entries: readonly TimeEntry[],
+  taskTypes: Roster['taskTypes'],
+  workingDates: ReadonlySet<string>,
+  dailyCapMinutes: number,
+): number {
+  const byDay = new Map<string, number>();
+  for (const e of entries) {
+    if (!workingDates.has(e.date)) continue;
+    const c = categoryOf(taskTypes, e.taskTypeName);
+    if (c !== 'pto' && c !== 'sick') continue;
+    byDay.set(e.date, (byDay.get(e.date) ?? 0) + e.minutes);
+  }
+  let total = 0;
+  for (const m of byDay.values()) total += Math.min(m, dailyCapMinutes);
+  return total;
 }
 
 function sum(entries: readonly TimeEntry[]): number {

@@ -11,9 +11,12 @@
  * or twice in a bad state, is worse than a person deciding.
  *
  * Limits: a worker that is down can't send anything, so a missed run is
- * reported when the worker comes back (the check runs on start). And a job is
- * only watched once it has run at least once, so a first deploy doesn't alert
- * about the runs before it existed.
+ * reported when the worker comes back (the check runs on start) — and only
+ * each job's most recent slot is checked, so an outage spanning two slots
+ * reports the latest; the host's own monitoring covers the outage itself. A
+ * job is only watched once it has run at least once, so a first deploy
+ * doesn't alert about the runs before it existed. A run started in the last
+ * two hours and still going counts as in progress, not missed.
  */
 import {
   addDays,
@@ -29,6 +32,9 @@ import { deliver, type DeliveryContext, type DeliveryResult } from './deliver';
 
 /** How long after its 9:00 slot a run must have finished before it counts as missed. */
 export const GRACE_MINUTES = 60;
+
+/** A 'running' row younger than this is a run in progress (e.g. a re-run by hand), not a dead one. */
+const IN_PROGRESS_MS = 2 * 60 * 60_000;
 
 const SLOT_MINUTES = 9 * 60;
 
@@ -81,6 +87,9 @@ export async function findMissedRuns(
   for (const run of expectedRuns(now, timeZone)) {
     const last = await store.lastRun(run.job, run.period);
     if (last?.status === 'ok') continue;
+    if (last?.status === 'running' && now.getTime() - last.startedAt.getTime() < IN_PROGRESS_MS) {
+      continue;
+    }
     // Not live yet: nothing has ever run for this job before this period.
     if (!last && !(await store.hadEarlierRun(run.job, run.period))) continue;
     missed.push({

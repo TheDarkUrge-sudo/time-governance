@@ -116,18 +116,27 @@ describe('weekly checks', () => {
 
   it('does not count PTO as worked time, but lowers the bar for it', () => {
     const entries = [
-      entry({
-        userKey: u1.id,
-        date: MON,
-        minutes: 24 * 60,
-        taskTypeName: 'PTO',
-        clientKey: 'C-HFA',
-      }),
+      ...[MON, '2026-09-23', '2026-09-24'].map((date) =>
+        entry({ userKey: u1.id, date, minutes: 8 * 60, taskTypeName: 'PTO', clientKey: 'C-HFA' }),
+      ),
       entry({ userKey: u1.id, date: TUE, minutes: 7 * 60 }),
     ];
     const review = runWeeklyChecks(input({ roster: roster([alvarez]), users: [u1], entries }));
     // 24 h PTO → 16 h available → threshold 8 h; 7 h worked is under it.
     expect(review.people[0]!.minimalThresholdMinutes).toBe(480);
+    expect(review.people[0]!.flags.map((f) => f.kind)).toEqual(['minimal_entry']);
+  });
+
+  it('leave on a weekend, or beyond a day’s hours, does not lower the bar', () => {
+    const entries = [
+      entry({ userKey: u1.id, date: '2026-09-26', minutes: 8 * 60, taskTypeName: 'PTO' }), // Saturday
+      entry({ userKey: u1.id, date: MON, minutes: 8 * 60, taskTypeName: 'PTO' }),
+      entry({ userKey: u1.id, date: MON, minutes: 8 * 60, taskTypeName: 'PTO' }), // entered twice
+      entry({ userKey: u1.id, date: TUE, minutes: 15 * 60 }),
+    ];
+    const review = runWeeklyChecks(input({ roster: roster([alvarez]), users: [u1], entries }));
+    // Only one Monday's 8 h counts → 32 h available → 16 h line.
+    expect(review.people[0]!.minimalThresholdMinutes).toBe(16 * 60);
     expect(review.people[0]!.flags.map((f) => f.kind)).toEqual(['minimal_entry']);
   });
 

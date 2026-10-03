@@ -27,7 +27,7 @@ export function renderMissedRun(m: MissedRun): EmailContent {
         : 'It started but never finished — the worker probably stopped mid-run. Some emails may already have gone out; re-running sends only the rest.';
   const subject = `Missed run: ${what}`;
   const steps = [
-    `Run it now, where the worker's settings are (the Replit Shell, or a machine with the same TG_MODE and SendGrid settings): ${command}`,
+    `Run it now where the worker runs — the Replit Shell, or \`az containerapp exec\` on Azure (not a laptop set to TG_MODE=off, which sends nothing): ${command}`,
     'Re-running is safe: anything already sent is skipped.',
     'If the worker was not deployed yet when this run was due, ignore this email.',
   ];
@@ -35,7 +35,7 @@ export function renderMissedRun(m: MissedRun): EmailContent {
   let html = heading(subject, `Scheduled ${dayLabel(m.scheduledOn)}, 9:00  |  To: Admin`);
   html += paragraph(escapeHtml(why));
   html += paragraph(
-    `Run it now, where the worker's settings are (the Replit Shell, or a machine with the same <code>TG_MODE</code> and SendGrid settings):`,
+    `Run it now where the worker runs — the Replit Shell, or <code>az containerapp exec</code> on Azure (not a laptop set to <code>TG_MODE=off</code>, which sends nothing):`,
   );
   html += `<p style="${FONT};font-size:13px;margin:8px 0 0;"><code style="background-color:#F5F5F5;border:1px solid #E5E5E5;border-radius:4px;padding:4px 8px;">${escapeHtml(command)}</code></p>`;
   html += paragraph(escapeHtml(steps.slice(1).join(' ')), { muted: true });

@@ -201,8 +201,20 @@ async function runJob(job: string | undefined): Promise<number> {
     return 1;
   }
   const dryRun = values['dry-run'];
+  if (!dryRun && env.TG_MODE === 'off') {
+    // A real run here would save results and record the run as done while
+    // sending nothing — and the missed-run check would then stop alerting.
+    say(
+      'TG_MODE is off here, so a real run would record results without sending anything.',
+      'Use --dry-run to preview, or run it where the worker runs (the Replit Shell, or az containerapp exec on Azure).',
+    );
+    return 1;
+  }
   let period: string;
   if (job === 'monthly') {
+    if (values.month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(values.month)) {
+      throw new Error('--month must be YYYY-MM');
+    }
     period = values.month ?? previousMonth(today);
   } else {
     if (values.week && !isIsoDate(values.week)) throw new Error('--week must be YYYY-MM-DD');
@@ -285,6 +297,7 @@ async function karbonCheck(): Promise<number> {
 
 async function taskTypes(): Promise<number> {
   const days = Number(values.days);
+  if (!Number.isInteger(days) || days < 1) throw new Error('--days must be a whole number of days');
   const karbon = new KarbonClient();
   const entries = await karbon.listTimeEntries({ start: addDays(today, -days), end: today });
   let roster: Roster | null = null;
