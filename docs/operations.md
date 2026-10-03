@@ -68,7 +68,8 @@ per missed run, never repeated hourly; it never re-runs a job itself.
 
 What it can't see: a worker that is down can't send anything, so a run missed
 during an outage is reported when the worker comes back up (the check runs on
-start). A job is watched only once it has run at least once, so a first deploy
+start). For the outage itself, use the host's own monitoring — Replit's
+deployment monitoring, or Azure Monitor on Azure. A job is watched only once it has run at least once, so a first deploy
 doesn't alert about runs from before it existed. In shadow mode the alert goes
 to `TG_SHADOW_TO`, like every other email.
 
