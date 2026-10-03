@@ -89,8 +89,11 @@ async function checkMissedRuns(): Promise<void> {
     logger.warn({ missed }, 'scheduled run missed');
     const results = await alertMissedRuns(alertDelivery(store), env.TG_ADMIN_TO, missed);
     for (const r of results) {
-      if (r.outcome !== 'sent' && r.outcome !== 'already_sent') {
+      // Logged every hour while it lasts, so only a real failure is an error.
+      if (r.outcome === 'failed' || r.outcome === 'no_recipient') {
         logger.error({ alert: r }, 'missed-run alert not sent');
+      } else if (r.outcome === 'in_doubt') {
+        logger.warn({ alert: r }, 'missed-run alert in doubt');
       }
     }
   } catch (err) {

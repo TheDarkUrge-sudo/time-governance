@@ -68,13 +68,18 @@ per missed run, never repeated hourly; it never re-runs a job itself.
 
 What it can't see: a worker that is down can't send anything, so a run missed
 during an outage is reported when the worker comes back up (the check runs on
-start). For the outage itself, use the host's own monitoring — Replit's
-deployment monitoring, or Azure Monitor on Azure. A job is watched only once it has run at least once, so a first deploy
-doesn't alert about runs from before it existed. In shadow mode the alert goes
+start) — and only each job's most recent run is checked, so an outage spanning
+two Tuesdays reports the latest one. For the outage itself, use the host's own
+monitoring — Replit's deployment monitoring, or Azure Monitor on Azure. A job
+is watched only once it has run at least once, so a first deploy doesn't alert
+about runs from before it existed. A run started in the last two hours that
+is still going (e.g. a re-run by hand) counts as in progress, not missed. In shadow mode the alert goes
 to `TG_SHADOW_TO`, like every other email.
 
-**A scheduled run failed or the worker was down.** Run it by hand — it covers
-the same period the schedule would have:
+**A scheduled run failed or the worker was down.** Run it by hand, where the
+worker runs — the Replit Shell, or `az containerapp exec` on Azure. It covers
+the same period the schedule would have. (A laptop set to `TG_MODE=off`
+refuses a real run: it would record the run as done while sending nothing.)
 
 ```sh
 pnpm tg run tuesday                 # last Monday–Sunday

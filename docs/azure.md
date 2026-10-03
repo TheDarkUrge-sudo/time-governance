@@ -169,7 +169,8 @@ and do dry runs.
      laptop's IP to the database firewall).
    - `KARBON_API_KEY` / `KARBON_API_SECRET` — for roster matching and dry runs.
    - **`TG_MODE=off`** — so nothing run from the laptop ever sends email. The
-     Azure worker is the only thing that should send.
+     Azure worker is the only thing that should send. With it off, `pnpm tg run`
+     only works with `--dry-run`; re-run a real job with `az containerapp exec`.
 4. Then, in VS Code's terminal:
 
 ```sh
