@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { member, roster } from '../test-fixtures';
 import { describeDiff, diffRoster } from './diff';
+import { HFA_TASK_TYPES } from './hfa-task-types';
 import { buildTemplateWorkbook } from './template';
 import { parseRosterWorkbook } from './workbook';
 
@@ -12,6 +13,9 @@ async function workbook(fill: (wb: ExcelJS.Workbook) => void): Promise<Buffer> {
   await wb.xlsx.load((await buildTemplateWorkbook()) as unknown as ArrayBuffer);
   const rosterTab = wb.getWorksheet('Roster')!;
   for (let r = 3; r <= 5; r++) rosterTab.getRow(r).values = [];
+  // Start each case from an empty Task Types tab, not the pre-filled HFA list.
+  const taskTab = wb.getWorksheet('Task Types')!;
+  for (let r = 3; r <= taskTab.rowCount; r++) taskTab.getRow(r).values = [];
   fill(wb);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -96,13 +100,18 @@ const GOOD = (wb: ExcelJS.Workbook) => {
 };
 
 describe('roster workbook', () => {
-  it('the blank template parses, warning about its example rows and empty tabs', async () => {
+  it('the template parses, warning about its example rows, with the HFA task types', async () => {
     const parsed = await parseRosterWorkbook(await buildTemplateWorkbook());
     expect(parsed.problems).toEqual([]);
     expect(parsed.roster.members).toHaveLength(3);
     expect(parsed.warnings.join('\n')).toContain("template's example rows");
     expect(parsed.warnings.join('\n')).toContain('No Partner');
-    expect(parsed.warnings.join('\n')).toContain('Task Types tab is empty');
+    expect(parsed.warnings.join('\n')).not.toContain('Task Types tab is empty');
+    expect(parsed.roster.taskTypes.size).toBe(HFA_TASK_TYPES.length);
+    expect(parsed.roster.taskTypes.get('pto - sick')).toBe('sick');
+    expect(parsed.roster.taskTypes.get('jury duty')).toBe('pto');
+    expect(parsed.roster.taskTypes.get('administrative')).toBe('non_billable');
+    expect(parsed.roster.taskTypes.get('tax review')).toBe('billable');
   });
 
   it('reads a filled-in workbook', async () => {

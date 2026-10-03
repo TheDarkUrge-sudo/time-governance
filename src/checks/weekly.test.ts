@@ -131,6 +131,30 @@ describe('weekly checks', () => {
     expect(review.people[0]!.flags.map((f) => f.kind)).toEqual(['minimal_entry']);
   });
 
+  it('PTO logged on a firm holiday does not lower the bar a second time', () => {
+    const entries = [
+      // "PTO - Holiday" style entry on the firm holiday itself.
+      entry({
+        userKey: u1.id,
+        date: MON,
+        minutes: 8 * 60,
+        taskTypeName: 'PTO',
+        clientKey: 'C-HFA',
+      }),
+      entry({ userKey: u1.id, date: TUE, minutes: 13 * 60 }),
+    ];
+    const review = runWeeklyChecks(
+      input({
+        roster: roster([alvarez], { holidays: [{ date: MON, name: 'Firm holiday' }] }),
+        users: [u1],
+        entries,
+      }),
+    );
+    // One holiday → 32 h available → 16 h line (not 12 h from counting the day twice).
+    expect(review.people[0]!.minimalThresholdMinutes).toBe(16 * 60);
+    expect(review.people[0]!.flags.map((f) => f.kind)).toEqual(['minimal_entry']);
+  });
+
   it('skips the missing check for someone hired mid-week, and skips not-yet-started staff entirely', () => {
     const newHire = member({ name: 'New Hire', hireDate: '2026-09-24' });
     const future = member({ name: 'Future Hire', hireDate: '2026-10-05' });
