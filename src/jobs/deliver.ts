@@ -11,7 +11,8 @@ import { type EmailContent, wrapEmail } from '../email/layout';
 import { EmailSendError, EmailSendUncertainError, type EmailTransport } from '../email/sendgrid';
 import { logger } from '../logger';
 
-export type EmailKind = 'csa_weekly' | 'partner_escalation' | 'manager_monthly' | 'admin_summary';
+export type EmailKind =
+  'csa_weekly' | 'partner_escalation' | 'manager_monthly' | 'admin_summary' | 'missed_run';
 export type Mode = 'off' | 'shadow' | 'live';
 
 export interface Delivery {

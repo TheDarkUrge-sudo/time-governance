@@ -9,18 +9,24 @@
  * Karbon sends its own Monday 11 AM reminder; nothing here duplicates it.
  * Each job is safe to re-run (sends are claimed once), so a missed or failed
  * run can be repeated by hand: `pnpm tg run tuesday`.
+ *
+ * Every hour, and on every start, the missed-run check emails TG_ADMIN_TO
+ * about any scheduled run with no successful record (src/jobs/watchdog.ts).
  */
 import cron from 'node-cron';
 
 import { firmLocalDate, isMonthlyReportDay, previousMonth, previousWeek } from './calendar';
+import { connect } from './db/client';
+import { Store } from './db/store';
 import { env } from './env';
 import type { JobResult } from './jobs/context';
 import { runFriday } from './jobs/friday';
 import { runMonthly } from './jobs/monthly';
 import { runTuesday } from './jobs/tuesday';
+import { alertMissedRuns, findMissedRuns } from './jobs/watchdog';
 import { karbonConfigured } from './karbon/client';
 import { logger } from './logger';
-import { liveRuntime, type Runtime } from './runtime';
+import { alertDelivery, liveRuntime, type Runtime } from './runtime';
 
 type Job = 'tuesday' | 'friday' | 'monthly';
 
@@ -63,22 +69,57 @@ async function run(job: Job): Promise<void> {
   }
 }
 
+let watching: Promise<void> | null = null;
+
+/** The missed-run check, one at a time; shutdown waits for one that is sending. */
+function watch(): Promise<void> {
+  watching ??= checkMissedRuns().finally(() => (watching = null));
+  return watching;
+}
+
+/** Never throws: a check that can't run is logged, not fatal. */
+async function checkMissedRuns(): Promise<void> {
+  if (running) return; // a run in progress isn't missed — the next check sees how it ended
+  let conn: ReturnType<typeof connect> | null = null;
+  try {
+    conn = connect();
+    const store = new Store(conn.db);
+    const missed = await findMissedRuns(store, new Date(), env.FIRM_TIMEZONE);
+    if (missed.length === 0) return;
+    logger.warn({ missed }, 'scheduled run missed');
+    const results = await alertMissedRuns(alertDelivery(store), env.TG_ADMIN_TO, missed);
+    for (const r of results) {
+      if (r.outcome !== 'sent' && r.outcome !== 'already_sent') {
+        logger.error({ alert: r }, 'missed-run alert not sent');
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, 'missed-run check failed');
+  } finally {
+    await conn?.close().catch(() => undefined);
+  }
+}
+
 const options = { timezone: env.FIRM_TIMEZONE };
 const tasks = [
   cron.schedule('0 9 * * 2', () => void run('tuesday'), options),
   cron.schedule('0 9 * * 5', () => void run('friday'), options),
   cron.schedule('0 9 * * 1', () => void run('monthly'), options),
+  cron.schedule('30 * * * *', () => void watch(), options),
 ];
 
 logger.info(
   { mode: env.TG_MODE, timezone: env.FIRM_TIMEZONE, karbon: karbonConfigured() },
-  'time governance worker started — Tue 9:00, Fri 9:00, monthly on the week-2 Monday 9:00',
+  'time governance worker started — Tue 9:00, Fri 9:00, monthly on the week-2 Monday 9:00, missed-run check hourly',
 );
+// A run missed while the worker was down is reported as soon as it is back.
+void watch();
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   for (const t of tasks) await t.stop();
   if (running) await running;
+  if (watching) await watching;
   process.exit(0);
 }
 process.on('SIGTERM', () => void shutdown('SIGTERM'));

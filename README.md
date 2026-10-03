@@ -2,13 +2,14 @@
 
 Automates the firm's Time Governance SOP (v1.0, June 2026) from Karbon's API:
 
-| When (firm time)                     | What                                                                                                                 | To                        |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Mon 11:00                            | Time-entry reminder — **sent by Karbon itself**, not this app                                                        | All staff                 |
-| **Tue 9:00**                         | Weekly review of last Monday–Sunday: missing / minimal time + the four CSA checks                                    | Each CSA, their staff     |
-| **Fri 9:00**                         | Re-check of the same week; anyone flagged Tuesday and still missing is escalated, with "weeks flagged" of the last 4 | Partners                  |
-| **Mon 9:00, week 2** (1st Mon ≥ 8th) | Last month's billable / non-billable / PTO / sick vs. capacity, utilization % vs. target                             | Each manager, their staff |
-| After every run                      | What was sent, plus anything on the roster that needs fixing                                                         | `TG_ADMIN_TO`             |
+| When (firm time)                     | What                                                                                                                             | To                        |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Mon 11:00                            | Time-entry reminder — **sent by Karbon itself**, not this app                                                                    | All staff                 |
+| **Tue 9:00**                         | Weekly review of last Monday–Sunday: missing / minimal time + the four CSA checks                                                | Each CSA, their staff     |
+| **Fri 9:00**                         | Re-check of the same week; anyone flagged Tuesday and still missing is escalated, with "weeks flagged" of the last 4             | Partners                  |
+| **Mon 9:00, week 2** (1st Mon ≥ 8th) | Last month's billable / non-billable / PTO / sick vs. capacity, utilization % vs. target                                         | Each manager, their staff |
+| After every run                      | What was sent, plus anything on the roster that needs fixing                                                                     | `TG_ADMIN_TO`             |
+| Hourly, and when the worker starts   | **Missed-run check:** a scheduled run with no successful record an hour after its slot → one alert with the command to re-run it | `TG_ADMIN_TO`             |
 
 It is a standalone worker — no web UI. The roster is a spreadsheet you upload
 with one command; everything else runs on schedule. It runs anywhere that can
