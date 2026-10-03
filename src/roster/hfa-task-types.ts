@@ -10,7 +10,6 @@
  * any that don't are listed as MISSING there and in each Tuesday summary.
  */
 export const HFA_TASK_TYPES: readonly (readonly [name: string, category: string])[] = [
-  ['Admin', 'Billable'],
   ['Administrative', 'Non-billable'],
   ['Advisory Services', 'Billable'],
   ['AUP Procedures', 'Billable'],
@@ -43,7 +42,6 @@ export const HFA_TASK_TYPES: readonly (readonly [name: string, category: string]
   ['Personnel Development', 'Non-billable'],
   ['Planning', 'Billable'],
   ['Practice Development', 'Non-billable'],
-  ['Preparation & Review of your Individual Income Tax Return', 'Billable'],
   ['Processing', 'Billable'],
   ['Professional Development & Training', 'Non-billable'],
   ['PTO - Holiday', 'PTO'],
