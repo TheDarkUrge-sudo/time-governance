@@ -56,9 +56,10 @@ us only the task type's _name_ on each time entry, so the workbook maps every
 name to a category. Any task type missing from the tab is listed in the admin
 summary every week.
 
-Utilization = billable ÷ capacity. Capacity = the person's Karbon
-`CapacityMinutesPerWeek` × working days in the month ÷ 5 (firm holidays
-excluded, PTO not). Without a Karbon capacity it falls back to the roster's
+Utilization = billable ÷ capacity, where capacity is the time the person was
+available: their Karbon `CapacityMinutesPerWeek` × working days in the month ÷
+5 (firm holidays excluded), less the PTO and sick time they logged — so a week
+of vacation doesn't pull utilization down. Without a Karbon capacity it falls back to the roster's
 Expected Weekly Hours, then 40 h — and the report marks it with an asterisk.
 
 The report also shows each person's change from the previous month ("vs.

@@ -1,9 +1,12 @@
 /**
  * The monthly manager report: billable, non-billable, PTO and sick hours per
- * person against capacity (decision 4: billable ÷ capacity, capacity net of
- * firm holidays, gross of PTO).
+ * person against capacity (decision 4, amended by 27: billable ÷ capacity,
+ * capacity net of firm holidays AND of PTO/sick logged — utilization of the
+ * time the person was actually available).
  *
- * Capacity = the person's weekly capacity × working days in the month ÷ 5.
+ * Capacity = the person's weekly capacity × working days in the month ÷ 5,
+ * less PTO and sick time logged on those working days. Leave logged on a firm
+ * holiday or a weekend isn't subtracted again (the day isn't in capacity).
  * Weekly capacity comes from Karbon's per-user CapacityMinutesPerWeek; when
  * Karbon has none it falls back to the roster's Expected Weekly Hours, then
  * the full-time week. Someone hired mid-month is measured from their hire date.
@@ -11,7 +14,13 @@
 import { workingDays } from '../calendar';
 import type { DateRange, KarbonUser, Policy, Roster, RosterMember } from '../domain';
 import type { TimeEntry } from '../domain';
-import { breakdown, checkableMembers, type MinuteBreakdown, usersByEmail } from './weekly';
+import {
+  breakdown,
+  categoryOf,
+  checkableMembers,
+  type MinuteBreakdown,
+  usersByEmail,
+} from './weekly';
 
 export type CapacitySource = 'karbon' | 'roster' | 'default';
 
@@ -73,8 +82,16 @@ export function runUtilization(input: {
       capacitySource = 'default';
     }
     const from = member.hireDate && member.hireDate > month.start ? member.hireDate : month.start;
-    const days = workingDays({ start: from, end: month.end }, roster.holidays).length;
-    const capacityMinutes = Math.round((weekly * days) / 5);
+    const days = workingDays({ start: from, end: month.end }, roster.holidays);
+    const working = new Set(days);
+    const leave = entries
+      .filter((e) => working.has(e.date))
+      .filter((e) => {
+        const c = categoryOf(roster.taskTypes, e.taskTypeName);
+        return c === 'pto' || c === 'sick';
+      })
+      .reduce((acc, e) => acc + e.minutes, 0);
+    const capacityMinutes = Math.max(0, Math.round((weekly * days.length) / 5) - leave);
     const utilization = capacityMinutes > 0 ? minutes.billable / capacityMinutes : null;
     const target = member.utilizationTarget;
 
