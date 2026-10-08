@@ -1,12 +1,13 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 import { PGlite } from '@electric-sql/pglite';
+import { getTableName, is, type SQL, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate as migratePg } from 'drizzle-orm/node-postgres/migrator';
-import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
+import { type PgDatabase, type PgQueryResultHKT, PgTable } from 'drizzle-orm/pg-core';
 import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
 import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator';
 import pg from 'pg';
@@ -79,10 +80,75 @@ export function connect(url = env.DATABASE_URL): { db: Db; close: () => Promise<
   return { db: drizzle(pool, { schema }), close: () => pool.end() };
 }
 
+export class ForeignDatabaseError extends Error {
+  constructor(detail: string) {
+    super(
+      `DATABASE_URL points at a database another app already uses (${detail}). Time governance needs its own database — on a laptop, DATABASE_URL=pglite:./data. Nothing was changed.`,
+    );
+    this.name = 'ForeignDatabaseError';
+  }
+}
+
+/**
+ * Refuses a database that belongs to another app (e.g. Clarity's) before
+ * writing anything to it: tables that aren't ours, or a drizzle migration
+ * journal holding another app's migrations. Sharing one would mix staff data
+ * into that app's database, and our migration rows would move its journal's
+ * watermark — so that app would skip its own migrations.
+ */
+async function assertOwnDatabase(db: Db): Promise<void> {
+  const ours = new Set<string>(
+    Object.values(schema)
+      .filter((t) => is(t, PgTable))
+      .map((t) => getTableName(t)),
+  );
+  const tables = await rows<{ name: string }>(
+    db,
+    sql`select table_name as name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`,
+  );
+  const foreign = tables.map((r) => r.name).filter((n) => !ours.has(n));
+  if (foreign.length > 0) {
+    throw new ForeignDatabaseError(`it has other tables: ${foreign.slice(0, 5).join(', ')}`);
+  }
+  const journal = await rows<{ present: boolean }>(
+    db,
+    sql`select to_regclass('drizzle.__drizzle_migrations') is not null as present`,
+  );
+  if (!journal[0]?.present) return;
+  const applied = await rows<{ hash: string }>(
+    db,
+    sql`select hash from drizzle.__drizzle_migrations`,
+  );
+  const known = new Set(ourMigrationHashes());
+  if (applied.some((r) => !known.has(r.hash))) {
+    throw new ForeignDatabaseError("its migration history isn't ours");
+  }
+}
+
+/** A raw query's rows — both drivers (node-postgres, PGlite) return `{ rows }`. */
+async function rows<T>(db: Db, query: SQL): Promise<T[]> {
+  return ((await db.execute(query)) as { rows: T[] }).rows;
+}
+
+/** sha256 of each committed migration file — exactly what drizzle records per applied migration. */
+function ourMigrationHashes(): string[] {
+  const journal = JSON.parse(
+    readFileSync(path.join(MIGRATIONS, 'meta', '_journal.json'), 'utf8'),
+  ) as {
+    entries: { tag: string }[];
+  };
+  return journal.entries.map((e) =>
+    createHash('sha256')
+      .update(readFileSync(path.join(MIGRATIONS, `${e.tag}.sql`), 'utf8'))
+      .digest('hex'),
+  );
+}
+
 /** Applies the committed migrations — to Postgres, or to the laptop's local database. */
 export async function migrateDatabase(url = env.DATABASE_URL): Promise<void> {
   const { db, close } = connect(url);
   try {
+    await assertOwnDatabase(db);
     if (isLocalDatabase(url)) {
       await migratePglite(db as unknown as Parameters<typeof migratePglite>[0], {
         migrationsFolder: MIGRATIONS,
