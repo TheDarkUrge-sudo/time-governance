@@ -84,6 +84,12 @@ the same picture.
 
 ## Good to know
 
+- **Its own database, never Clarity's.** Use `pglite:./data` here, not the
+  connection string Clarity's scripts use. Setup refuses a database that
+  another app already uses (its tables or migration history), so nothing is
+  written to it — sharing one would mix staff data into the AR database and
+  could make Clarity skip its own migrations.
+
 - **One command at a time.** The local database allows one process; a second
   `tg` command while one is running says "in use by another tg command" —
   wait and retry. The hosted worker (`pnpm start`) refuses a local database.

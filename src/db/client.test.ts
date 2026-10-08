@@ -3,9 +3,16 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { connect, holdLocalDatabase, isLocalDatabase, migrateDatabase } from './client';
+import {
+  connect,
+  ForeignDatabaseError,
+  holdLocalDatabase,
+  isLocalDatabase,
+  migrateDatabase,
+} from './client';
 import { Store } from './store';
 
 describe('laptop mode: local database (pglite:)', () => {
@@ -33,6 +40,36 @@ describe('laptop mode: local database (pglite:)', () => {
     const again = connect(url);
     expect((await new Store(again.db).lastRun('tuesday', '2026-09-21'))?.status).toBe('ok');
     await again.close();
+  });
+
+  it("refuses another app's database before writing anything to it", async () => {
+    // Another app's tables (as in Clarity's production database).
+    const other = connect(url);
+    await other.db.execute(sql`create table invoices (id int)`);
+    await other.close();
+    await expect(migrateDatabase(url)).rejects.toThrow(ForeignDatabaseError);
+    const after = connect(url);
+    const ours = await after.db.execute(sql`select to_regclass('public.job_runs') as t`);
+    await after.close();
+    expect((ours as { rows: { t: unknown }[] }).rows[0]?.t).toBeNull(); // nothing created
+  });
+
+  it("refuses a database whose migration history is another app's", async () => {
+    const other = connect(url);
+    await other.db.execute(sql`create schema drizzle`);
+    await other.db.execute(
+      sql`create table drizzle.__drizzle_migrations (id serial primary key, hash text not null, created_at bigint)`,
+    );
+    await other.db.execute(
+      sql`insert into drizzle.__drizzle_migrations (hash, created_at) values ('not-ours', 1)`,
+    );
+    await other.close();
+    await expect(migrateDatabase(url)).rejects.toThrow("migration history isn't ours");
+  });
+
+  it('re-migrating its own database is fine', async () => {
+    await migrateDatabase(url);
+    await migrateDatabase(url);
   });
 
   /** Tries to open the folder from a second process; returns what it reported. */
