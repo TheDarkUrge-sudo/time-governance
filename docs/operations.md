@@ -26,6 +26,9 @@ only goes out if you press Send. The banner says so.
 **Status.** `pnpm tg status` — mode, integrations, roster size and last
 upload, the last 10 runs.
 
+**Laptop mode** (no server — [docs/laptop.md](laptop.md)): `pnpm tg run due`
+each workday morning runs whatever is due; everything below applies the same.
+
 **Roster changes** (new hire, leaver, new manager, CSA reassignment, holiday
 list, a new task type): edit the workbook, then
 `pnpm tg roster:import roster.xlsx` to preview the changes and

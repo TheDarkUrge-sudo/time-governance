@@ -4,4 +4,6 @@ node_modules
 !.env.example
 coverage
 out
+# Laptop mode's local database (staff history) — never commit it.
+data
 *.log

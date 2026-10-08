@@ -4,6 +4,7 @@
  *   status                         mode, integrations, roster, recent runs
  *   roster:import <file.xlsx>      validate and preview a roster upload
  *       --apply                    …and save it
+ *   run due                        run whatever is due today (laptop mode — see docs/laptop.md)
  *   run <tuesday|friday|monthly>   run a job now (sends per TG_MODE)
  *       --week YYYY-MM-DD          any date in the week to review (default: last week)
  *       --month YYYY-MM            the month to report (default: last month)
@@ -30,7 +31,13 @@ import {
   weekOf,
 } from './calendar';
 import { categoryOf } from './checks/weekly';
-import { connect } from './db/client';
+import {
+  connect,
+  holdLocalDatabase,
+  isLocalDatabase,
+  localDatabaseDir,
+  migrateDatabase,
+} from './db/client';
 import { Store } from './db/store';
 import type { Roster } from './domain';
 import { emailConfigured } from './email/sendgrid';
@@ -41,7 +48,7 @@ import { describeResults } from './jobs/deliver';
 import { runFriday } from './jobs/friday';
 import { runMonthly } from './jobs/monthly';
 import { runTuesday } from './jobs/tuesday';
-import { findMissedRuns } from './jobs/watchdog';
+import { type ExpectedRun, findDueRuns, findMissedRuns } from './jobs/watchdog';
 import { KarbonClient, karbonConfigured } from './karbon/client';
 import { resolveInternalClients } from './karbon/internal-client';
 import { timesheetUrl } from './karbon/links';
@@ -72,6 +79,11 @@ const firmLocalDateTime = (d: Date) =>
   d.toLocaleString('sv-SE', { timeZone: env.FIRM_TIMEZONE, hour12: false }).slice(0, 16);
 
 async function main(): Promise<number> {
+  // Laptop mode: the local database is created and kept up to date here, so
+  // there is no separate migrate step (only for the commands that use it).
+  if (isLocalDatabase() && ['status', 'roster:import', 'run', 'history'].includes(command ?? '')) {
+    await migrateDatabase();
+  }
   switch (command) {
     case 'status':
       return status();
@@ -89,7 +101,7 @@ async function main(): Promise<number> {
       return history(arg);
     default:
       say(
-        'Usage: pnpm tg <status | roster:import <file> [--apply] | run <tuesday|friday|monthly> [--dry-run] | karbon:check | karbon:task-types | karbon:clients <text>>',
+        'Usage: pnpm tg <status | roster:import <file> [--apply] | run <due|tuesday|friday|monthly> [--dry-run] | karbon:check | karbon:task-types | karbon:clients <text> | history <name>>',
       );
       return command ? 1 : 0;
   }
@@ -122,6 +134,9 @@ async function status(): Promise<number> {
     say('Database:   NOT configured');
     return 0;
   }
+  say(
+    `Database:   ${isLocalDatabase() ? `local folder ${localDatabaseDir(env.DATABASE_URL)} (laptop mode — run jobs with pnpm tg run due)` : 'PostgreSQL'}`,
+  );
   const { db, close } = connect();
   try {
     const store = new Store(db);
@@ -195,23 +210,89 @@ async function rosterImport(file: string | undefined): Promise<number> {
   }
 }
 
-async function runJob(job: string | undefined): Promise<number> {
-  if (job !== 'tuesday' && job !== 'friday' && job !== 'monthly') {
-    say('Which job? pnpm tg run <tuesday|friday|monthly>');
-    return 1;
-  }
-  const dryRun = values['dry-run'];
-  if (!dryRun && env.TG_MODE === 'off') {
-    // A real run here would save results and record the run as done while
-    // sending nothing — and the missed-run check would then stop alerting.
+/**
+ * With TG_MODE=off a real run would save results and record the run as done
+ * while sending nothing — and the missed-run check would then stop alerting.
+ */
+function refusedInOffMode(): boolean {
+  if (values['dry-run'] || env.TG_MODE !== 'off') return false;
+  say(
+    'TG_MODE is off here, so a real run would record results without sending anything.',
+    'Use --dry-run to preview, or run it where the worker runs (the Replit Shell, or az containerapp exec on Azure) — or, on a laptop that is the host, set TG_MODE=shadow or live.',
+  );
+  return true;
+}
+
+/**
+ * Laptop mode: run every job that is due today, in order. Safe to run every
+ * morning (or from Task Scheduler): a job already run is skipped, and nothing
+ * is ever sent twice.
+ */
+async function runDue(): Promise<number> {
+  if (!env.DATABASE_URL || !isLocalDatabase()) {
+    // With a hosted worker, the worker runs the schedule (and only alerts on a
+    // missed run); `due` there would race it.
     say(
-      'TG_MODE is off here, so a real run would record results without sending anything.',
-      'Use --dry-run to preview, or run it where the worker runs (the Replit Shell, or az containerapp exec on Azure).',
+      '`run due` is for laptop mode (DATABASE_URL=pglite:…). With a hosted worker, re-run a job with pnpm tg run <tuesday|friday|monthly>.',
     );
     return 1;
   }
+  if (refusedInOffMode()) return 1;
+  // Hold the local database for the whole run, so a second `due` (Task
+  // Scheduler and a manual one together) waits instead of repeating a job.
+  const release = holdLocalDatabase(localDatabaseDir(env.DATABASE_URL));
+  try {
+    const { db, close } = connect();
+    let due: ExpectedRun[];
+    try {
+      due = await findDueRuns(new Store(db), today);
+    } finally {
+      await close();
+    }
+    if (due.length === 0) {
+      say(`Nothing due today (${today}).`);
+      return 0;
+    }
+    let code = 0;
+    const tuesdayRan = new Set<string>();
+    for (const run of due) {
+      // Friday escalates people CSAs followed up with since Tuesday; if that
+      // week's Tuesday review only went out now, its escalation waits.
+      if (run.job === 'friday' && tuesdayRan.has(run.period)) {
+        say(
+          '',
+          `friday ${run.period}: waits — that week's Tuesday review only went out now. It runs next time (or: pnpm tg run friday --week ${run.period}).`,
+        );
+        continue;
+      }
+      say('', `── ${run.job} (scheduled ${run.scheduledOn}) ──`);
+      if (run.job === 'tuesday') tuesdayRan.add(run.period);
+      try {
+        code = Math.max(code, await runJob(run.job, run.period));
+      } catch (err) {
+        // One job failing doesn't stop the rest; `tg status` shows it.
+        say(`${run.job} failed: ${err instanceof Error ? err.message : String(err)}`);
+        code = Math.max(code, 1);
+      }
+    }
+    return code;
+  } finally {
+    release();
+  }
+}
+
+async function runJob(job: string | undefined, periodOverride?: string): Promise<number> {
+  if (job === 'due') return runDue();
+  if (job !== 'tuesday' && job !== 'friday' && job !== 'monthly') {
+    say('Which job? pnpm tg run <due|tuesday|friday|monthly>');
+    return 1;
+  }
+  const dryRun = values['dry-run'];
+  if (refusedInOffMode()) return 1;
   let period: string;
-  if (job === 'monthly') {
+  if (periodOverride) {
+    period = periodOverride;
+  } else if (job === 'monthly') {
     if (values.month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(values.month)) {
       throw new Error('--month must be YYYY-MM');
     }

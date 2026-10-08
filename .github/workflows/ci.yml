@@ -18,8 +18,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Dry-run output is never committed (it holds real staff data)
-        run: test -z "$(git ls-files out)"
+      - name: Dry-run output and the laptop database are never committed (they hold real staff data)
+        run: test -z "$(git ls-files out data)"
       - run: pnpm run format:check
       - run: pnpm run typecheck
       - run: pnpm run lint

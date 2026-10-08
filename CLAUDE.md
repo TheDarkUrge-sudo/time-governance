@@ -62,4 +62,6 @@ database is in-process PGlite with the real migrations (`src/db/test-db.ts`).
 - Karbon notes go through `postGovernanceNote()` only: Hidden + Governance-type
   clients, checked every run (dry runs and shadow too); claimed before posting;
   never re-posted on an uncertain failure (the API cannot delete a note).
-- `out/` holds real staff data from dry runs — never commit it.
+- `out/` holds real staff data from dry runs — never commit it. Nor `data/`: laptop
+  mode's local database (`DATABASE_URL=pglite:./data`, `src/db/client.ts` — one process at
+  a time, guarded by a lock file; the worker refuses it; `pnpm tg run due` runs jobs).

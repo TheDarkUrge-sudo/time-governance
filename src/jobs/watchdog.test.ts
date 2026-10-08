@@ -7,7 +7,7 @@ import { Store } from '../db/store';
 import { testDb } from '../db/test-db';
 import type { OutboundEmail } from '../email/sendgrid';
 import type { DeliveryContext } from './deliver';
-import { alertMissedRuns, expectedRuns, findMissedRuns } from './watchdog';
+import { alertMissedRuns, expectedRuns, findDueRuns, findMissedRuns } from './watchdog';
 
 const TZ = 'America/New_York';
 // Tue Sep 29 2026, 10:30 EDT (UTC−4).
@@ -100,6 +100,22 @@ describe('missed runs (PGlite)', () => {
       .set({ startedAt: new Date('2026-09-29T14:20:00Z') }) // 10 minutes ago
       .where(eq(jobRuns.period, '2026-09-21'));
     expect(await findMissedRuns(store, TUE_1030, TZ)).toEqual([]);
+  });
+
+  it('laptop mode: each job starts on its own day, then catches up what was missed', async () => {
+    // First use on a Thursday: nothing — no stale reports on day one.
+    expect(await findDueRuns(store, '2026-10-01')).toEqual([]);
+    // First use on a Tuesday: that day's review only.
+    expect(await findDueRuns(store, '2026-09-29')).toEqual([
+      { job: 'tuesday', period: '2026-09-21', scheduledOn: '2026-09-29' },
+    ]);
+    await run('tuesday', '2026-09-21', { status: 'ok' });
+    expect(await findDueRuns(store, '2026-09-29')).toEqual([]); // done — re-running is a no-op
+
+    // The laptop was off the next Tuesday: Thursday's `due` catches it up.
+    expect((await findDueRuns(store, '2026-10-08')).map((r) => [r.job, r.period])).toEqual([
+      ['tuesday', '2026-09-28'],
+    ]);
   });
 
   it('emails the admin once per missed run, with the command to run it', async () => {

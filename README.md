@@ -15,7 +15,9 @@ It is a standalone worker — no web UI. The roster is a spreadsheet you upload
 with one command; everything else runs on schedule. It runs anywhere that can
 run Node 24 or a container, with Postgres: **Azure** ([docs/azure.md](docs/azure.md),
 recommended — data stays in the firm's tenant) or **Replit** (`.replit`).
-Admin commands run from a laptop in VS Code.
+Admin commands run from a laptop in VS Code. Or run the whole thing from a
+laptop with no server at all — **laptop mode** ([docs/laptop.md](docs/laptop.md)):
+a local database folder and one command, `pnpm tg run due`, each workday.
 
 ## Karbon governance notes (optional)
 
@@ -134,6 +136,7 @@ In short:
 ```sh
 pnpm tg status                        # mode, integrations, roster, recent runs
 pnpm tg roster:import <file> [--apply]
+pnpm tg run due                       # laptop mode: run whatever is due today
 pnpm tg run tuesday|friday|monthly    # run now (sends per TG_MODE; never sends twice)
     --week 2026-09-21 | --month 2026-09
     --dry-run [--roster file.xlsx] [--out dir]

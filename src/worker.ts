@@ -16,7 +16,7 @@
 import cron from 'node-cron';
 
 import { firmLocalDate, isMonthlyReportDay, previousMonth, previousWeek } from './calendar';
-import { connect } from './db/client';
+import { connect, isLocalDatabase } from './db/client';
 import { Store } from './db/store';
 import { env } from './env';
 import type { JobResult } from './jobs/context';
@@ -27,6 +27,15 @@ import { alertMissedRuns, findMissedRuns } from './jobs/watchdog';
 import { karbonConfigured } from './karbon/client';
 import { logger } from './logger';
 import { alertDelivery, liveRuntime, type Runtime } from './runtime';
+
+// The worker shares its database with the CLI; the laptop's local database
+// allows one process at a time. On a laptop, run jobs with `pnpm tg run due`.
+if (isLocalDatabase()) {
+  logger.error(
+    'DATABASE_URL points at a local (pglite:) database. The worker needs a PostgreSQL server; on a laptop, run jobs with `pnpm tg run due` instead (docs/laptop.md).',
+  );
+  process.exit(1);
+}
 
 type Job = 'tuesday' | 'friday' | 'monthly';
 

@@ -66,7 +66,15 @@ function lastSlot(
 
 /** The most recent slot of each job that should have finished by `now`, and the period it covers. */
 export function expectedRuns(now: Date, timeZone: string): ExpectedRun[] {
-  const local = firmLocalTime(new Date(now.getTime() - GRACE_MINUTES * 60_000), timeZone);
+  return slotsAt(firmLocalTime(new Date(now.getTime() - GRACE_MINUTES * 60_000), timeZone));
+}
+
+/** Each job's latest slot on or before `today` (today's counts all day) — for `tg run due`. */
+export function latestSlots(today: string): ExpectedRun[] {
+  return slotsAt({ date: today, minutes: 24 * 60 });
+}
+
+function slotsAt(local: { date: string; minutes: number }): ExpectedRun[] {
   const tuesday = lastSlot(local, (d) => weekday(d) === 2);
   const friday = lastSlot(local, (d) => weekday(d) === 5);
   const monthly = lastSlot(local, isMonthlyReportDay);
@@ -98,6 +106,25 @@ export async function findMissedRuns(
     });
   }
   return missed;
+}
+
+/**
+ * Laptop mode (`tg run due`): each job's latest slot that has no successful
+ * run yet. A job starts on its own day — its first run is when its slot is
+ * today — so a first `due` doesn't send last month's report or an old week's
+ * escalation; after that, a slot missed while the laptop was off is caught up.
+ */
+export async function findDueRuns(store: Store, today: string): Promise<ExpectedRun[]> {
+  const due: ExpectedRun[] = [];
+  for (const run of latestSlots(today)) {
+    const last = await store.lastRun(run.job, run.period);
+    if (last?.status === 'ok') continue;
+    if (run.scheduledOn !== today && !last && !(await store.hadEarlierRun(run.job, run.period))) {
+      continue;
+    }
+    due.push(run);
+  }
+  return due;
 }
 
 /** One email per missed run, claimed like every other send — so the hourly check alerts once. */
